@@ -70,6 +70,11 @@ See `hdf5/h5o_types.go` for the in-core object header message structs
 `hdf5/h5hl.go`, `hdf5/h5hg.go`, `hdf5/h5b.go`, `hdf5/h5s.go`, `hdf5/h5t.go`,
 `hdf5/h5z.go` for the module entry points.
 
+Iteration sentinels (from `h5b.go`): an iterate operator returns
+`errBIterStop` to stop early without error (the C `H5_ITER_STOP`), and a
+`bFind` leaf callback returns `errBNotFound` to report that the child does
+not hold the key (the C `*found = false`).
+
 ## Verification
 
 `conformance` opens every HDF5 file in the repository with both packages and
