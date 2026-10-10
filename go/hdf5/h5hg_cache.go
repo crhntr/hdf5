@@ -8,8 +8,6 @@ import "bytes"
 // H5HG_MAGIC / H5_SIZEOF_MAGIC
 var h5hgMagic = []byte("GCOL")
 
-const h5SizeofMagic = 4
-
 // Global heap collection version.
 const h5hgVersion = 1
 
