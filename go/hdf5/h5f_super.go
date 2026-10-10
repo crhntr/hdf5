@@ -2,7 +2,11 @@ package hdf5
 
 // Translated from src/H5Fsuper.c and src/H5Fsuper_cache.c (read side only).
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/HDFGroup/hdf5/go/h5"
+)
 
 // H5F_SIGNATURE / H5F_SIGNATURE_LEN
 var h5fSignature = []byte("\211HDF\r\n\032\n")
@@ -407,9 +411,9 @@ func (f *File) cacheDrvrinfoDeserialize(addr haddr) (*drvinfo, error) {
 }
 
 // Superblock returns a description of the file's superblock.
-func (f *File) Superblock() SuperblockInfo {
+func (f *File) Superblock() h5.SuperblockInfo {
 	s := f.sblock
-	return SuperblockInfo{
+	return h5.SuperblockInfo{
 		Version:           s.superVers,
 		SizeOfOffsets:     s.sizeofAddr,
 		SizeOfLengths:     s.sizeofSize,
@@ -433,21 +437,4 @@ func (f *File) driverName() string {
 		return ""
 	}
 	return f.drvinfo.name
-}
-
-// SuperblockInfo is the decoded superblock as reported to users.
-type SuperblockInfo struct {
-	Version           uint8
-	SizeOfOffsets     uint8
-	SizeOfLengths     uint8
-	BaseAddress       uint64
-	ExtensionAddress  uint64 // ^uint64(0) when absent
-	DriverInfoAddress uint64 // ^uint64(0) when absent
-	RootGroupAddress  uint64
-	EndOfFileAddress  uint64
-	StatusFlags       uint8
-	SymLeafK          uint
-	SnodeBtreeK       uint
-	ChunkBtreeK       uint
-	DriverName        string
 }

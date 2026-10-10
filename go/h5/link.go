@@ -76,3 +76,20 @@ type ObjectInfo struct {
 	// Times are seconds since the Unix epoch; zero when not tracked.
 	ATime, MTime, CTime, BTime int64
 }
+
+// SuperblockInfo is the decoded superblock as reported to users.
+type SuperblockInfo struct {
+	Version           uint8
+	SizeOfOffsets     uint8
+	SizeOfLengths     uint8
+	BaseAddress       uint64
+	ExtensionAddress  uint64 // ^uint64(0) when absent
+	DriverInfoAddress uint64 // ^uint64(0) when absent
+	RootGroupAddress  uint64
+	EndOfFileAddress  uint64
+	StatusFlags       uint8
+	SymLeafK          uint
+	SnodeBtreeK       uint
+	ChunkBtreeK       uint
+	DriverName        string // 8-character driver id from the driver info block, "" when absent
+}
