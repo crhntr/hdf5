@@ -301,6 +301,11 @@ func (f *File) eof() uint64 {
 // driver files happens after the superblock is read (see h5fd_family.go /
 // h5fd_multi.go) and replaces f.fd.
 func openDriver(name string, o *openOptions) (fileDriver, error) {
+	// Family patterns, multi/split base names and driver-info-less family
+	// files cannot be opened as a single flat file (h5fd_sb.go).
+	if fd, err := openMemberDriver(name, o); fd != nil || err != nil {
+		return fd, err
+	}
 	osf, err := os.Open(name)
 	if err != nil {
 		return nil, wrapf(err, H5E_FILE, H5E_CANTOPENFILE, "unable to open file")

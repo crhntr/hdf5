@@ -34,7 +34,7 @@ func corpusFiles(t testing.TB) []string {
 			return nil
 		}
 		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "go" {
+			if strings.HasPrefix(d.Name(), ".") || d.Name() == "go" {
 				return filepath.SkipDir
 			}
 			return nil
