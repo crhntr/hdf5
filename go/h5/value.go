@@ -79,3 +79,11 @@ type Selection struct {
 	Blocks [][2][]uint64 // for SelHyperslab: {start, end} pairs
 	Points [][]uint64    // for SelPoints
 }
+
+// AttrRef is a decoded attribute reference (HDF5 1.12+ H5R_ATTR): the
+// address of the object and the attribute name.
+type AttrRef struct {
+	Address   uint64
+	Undefined bool
+	Name      string
+}
