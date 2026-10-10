@@ -26,9 +26,6 @@ const h5hlSpecReadSize = 512
 // h5hlMagic is H5HL_MAGIC.
 var h5hlMagic = []byte("HEAP")
 
-// h5SizeofMagic is H5_SIZEOF_MAGIC.
-const h5SizeofMagic = 4
-
 // h5hlFreeNull is H5HL_FREE_NULL: value indicating end of free list on disk.
 const h5hlFreeNull = 1
 

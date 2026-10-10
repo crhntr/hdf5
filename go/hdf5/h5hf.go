@@ -12,7 +12,7 @@ const (
 	h5hfHdrMagic    = "FRHP" /* Header */
 	h5hfIblockMagic = "FHIB" /* Indirect block */
 	h5hfDblockMagic = "FHDB" /* Direct block */
-	h5SizeofMagic   = 4      /* H5_SIZEOF_MAGIC */
+
 )
 
 // Fractal heap format versions (H5HFcache.c).
@@ -21,10 +21,6 @@ const (
 	h5hfDblockVersion = 0 /* Direct block */
 	h5hfIblockVersion = 0 /* Indirect block */
 )
-
-// h5hfECantOperate is H5E_CANTOPERATE, which errors.go does not define yet.
-// TODO: replace with H5E_CANTOPERATE once it is added to errors.go.
-const h5hfECantOperate errMinor = "H5E_CANTOPERATE"
 
 // Size of checksum information (on disk)
 const h5hfSizeofChksum = 4

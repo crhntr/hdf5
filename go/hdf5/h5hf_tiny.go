@@ -79,7 +79,7 @@ func h5hfTinyOpReal(hdr *h5hfHdr, id []byte, op func(obj []byte) error) error {
 
 	/* Call the user's 'op' callback */
 	if err := op(id[start : start+encObjSize]); err != nil {
-		return wrapf(err, H5E_HEAP, h5hfECantOperate, "application's callback failed")
+		return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "application's callback failed")
 	}
 	return nil
 }
@@ -95,7 +95,7 @@ func h5hfTinyRead(hdr *h5hfHdr, id []byte) ([]byte, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, wrapf(err, H5E_HEAP, h5hfECantOperate, "unable to operate on heap object")
+		return nil, wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "unable to operate on heap object")
 	}
 	return obj, nil
 }
@@ -104,7 +104,7 @@ func h5hfTinyRead(hdr *h5hfHdr, id []byte) ([]byte, error) {
 func h5hfTinyOp(hdr *h5hfHdr, id []byte, op func(obj []byte) error) error {
 	/* Call the internal 'op' routine routine */
 	if err := h5hfTinyOpReal(hdr, id, op); err != nil {
-		return wrapf(err, H5E_HEAP, h5hfECantOperate, "unable to operate on heap object")
+		return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "unable to operate on heap object")
 	}
 	return nil
 }

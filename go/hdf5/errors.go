@@ -85,6 +85,7 @@ const (
 	H5E_SEEKERROR    errMinor = "H5E_SEEKERROR"
 	H5E_CANTCHECKSUM errMinor = "H5E_CANTCHECKSUM"
 	H5E_BADCHECKSUM  errMinor = "H5E_BADCHECKSUM"
+	H5E_CANTOPERATE  errMinor = "H5E_CANTOPERATE"
 )
 
 // Error is the error type returned by this package. It carries the HDF5 error

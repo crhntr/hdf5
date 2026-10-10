@@ -117,7 +117,7 @@ func h5hfManOpReal(hdr *h5hfHdr, id []byte, op func(obj []byte) error) error {
 
 	/* Call the user's 'op' callback */
 	if err := op(dblock.blk[blkOff : blkOff+objLen]); err != nil {
-		return wrapf(err, H5E_HEAP, h5hfECantOperate, "application's callback failed")
+		return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "application's callback failed")
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func h5hfManRead(hdr *h5hfHdr, id []byte) ([]byte, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, wrapf(err, H5E_HEAP, h5hfECantOperate, "unable to operate on heap object")
+		return nil, wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "unable to operate on heap object")
 	}
 	return obj, nil
 }
@@ -143,7 +143,7 @@ func h5hfManRead(hdr *h5hfHdr, id []byte) ([]byte, error) {
 func h5hfManOp(hdr *h5hfHdr, id []byte, op func(obj []byte) error) error {
 	/* Call the internal 'op' routine routine */
 	if err := h5hfManOpReal(hdr, id, op); err != nil {
-		return wrapf(err, H5E_HEAP, h5hfECantOperate, "unable to operate on heap object")
+		return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "unable to operate on heap object")
 	}
 	return nil
 }

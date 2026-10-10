@@ -286,7 +286,7 @@ func h5hfHugeOpReal(fh *h5hf, id []byte, op func(obj []byte) error) error {
 
 	/* Call the user's 'op' callback */
 	if err := op(readBuf); err != nil {
-		return wrapf(err, H5E_HEAP, h5hfECantOperate, "application's callback failed")
+		return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "application's callback failed")
 	}
 	return nil
 }
@@ -302,7 +302,7 @@ func h5hfHugeRead(fh *h5hf, id []byte) ([]byte, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, wrapf(err, H5E_HEAP, h5hfECantOperate, "unable to operate on heap object")
+		return nil, wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "unable to operate on heap object")
 	}
 	return obj, nil
 }
@@ -311,7 +311,7 @@ func h5hfHugeRead(fh *h5hf, id []byte) ([]byte, error) {
 func h5hfHugeOp(fh *h5hf, id []byte, op func(obj []byte) error) error {
 	/* Call the internal 'op' routine routine */
 	if err := h5hfHugeOpReal(fh, id, op); err != nil {
-		return wrapf(err, H5E_HEAP, h5hfECantOperate, "unable to operate on heap object")
+		return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "unable to operate on heap object")
 	}
 	return nil
 }

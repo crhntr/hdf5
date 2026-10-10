@@ -258,3 +258,7 @@ func varLenBytes(v uint64) int {
 	}
 	return 8
 }
+
+// h5SizeofMagic is H5_SIZEOF_MAGIC: the length of the 4-byte signature that
+// starts every metadata block ("TREE", "HEAP", "FRHP", ...).
+const h5SizeofMagic = 4
