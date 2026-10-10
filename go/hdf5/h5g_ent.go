@@ -2,6 +2,8 @@ package hdf5
 
 // Translated from src/H5Gent.c: symbol table entries.
 
+import "github.com/HDFGroup/hdf5/go/h5"
+
 // H5G_cache_type_t
 type h5gCacheType int32
 
@@ -94,4 +96,38 @@ func h5gEntDecodeVec(p *image, n int) ([]h5gEntry, error) {
 		ents = append(ents, *e)
 	}
 	return ents, nil
+}
+
+// gEntToLink is H5G__ent_to_link: convert a symbol table entry (plus the
+// local heap holding its name) into a link message.
+func gEntToLink(ent *h5gEntry, heap *h5hl) (*h5oLink, error) {
+	lnk := &h5oLink{cset: h5.CsetASCII}
+
+	/* Set (default) common info for link */
+	name, err := heap.stringAt(ent.nameOff)
+	if err != nil {
+		return nil, wrapf(err, H5E_SYM, H5E_CANTGET, "unable to get symbol table link name")
+	}
+	if name == "" {
+		return nil, errorf(H5E_SYM, H5E_BADVALUE, "invalid link name")
+	}
+	lnk.name = name
+
+	/* Object is a symbolic or hard link */
+	if ent.typ == h5gCachedSlink {
+		s, err := heap.stringAt(uint64(ent.lvalOffset))
+		if err != nil {
+			return nil, wrapf(err, H5E_SYM, H5E_CANTGET, "unable to get symbolic link name")
+		}
+		/* Set link value */
+		lnk.softName = s
+		/* Set link type */
+		lnk.typ = h5.LinkSoft
+	} else {
+		/* Set address of object */
+		lnk.addr = ent.header
+		/* Set link type */
+		lnk.typ = h5.LinkHard
+	}
+	return lnk, nil
 }
