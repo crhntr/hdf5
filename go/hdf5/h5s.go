@@ -1,13 +1,8 @@
 package hdf5
 
-// STUB — to be replaced by the translation of src/H5Osdspace.c, src/H5S.c,
+// STUB — to be replaced by the translation of src/H5S.c,
 // src/H5Sselect.c, src/H5Sall.c, src/H5Spoint.c, src/H5Shyper.c (deserialize
 // and iteration only) and src/H5Snone.c.
-
-// h5oSdspaceDecode is H5O__sdspace_decode: decode a dataspace message.
-func h5oSdspaceDecode(f *File, p *image) (*h5sExtent, error) {
-	return nil, errorf(H5E_DATASPACE, H5E_UNSUPPORTED, "dataspace not translated yet")
-}
 
 // h5sSelectDeserialize is H5S_select_deserialize: decode a serialized
 // selection (as stored in region references and virtual dataset mappings).
