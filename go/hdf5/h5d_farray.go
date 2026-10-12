@@ -264,7 +264,7 @@ func h5dFarrayIdxIterateCb(elmt any, udata *h5dFarrayItUd) error {
 			return errorf(H5E_DATASET, H5E_BADTYPE, "unexpected fixed array element type %T", elmt)
 		}
 		udata.chunkRec.chunkAddr = filtElmt.addr
-		udata.chunkRec.nbytes = uint64(filtElmt.nbytes)
+		udata.chunkRec.nbytes = filtElmt.nbytes
 		udata.chunkRec.filterMask = filtElmt.filterMask
 	} else {
 		a, ok := elmt.(haddr)
@@ -329,7 +329,7 @@ func h5dFarrayIdxIterate(idxInfo *h5dFarrayIdxInfo, chunkCb func(rec *h5dChunkRe
 		udata.chunkRec.scaled = make([]uint64, idxInfo.layout.ndims-1)
 		udata.filtered = idxInfo.pline != nil && idxInfo.pline.nused > 0
 		if !udata.filtered {
-			udata.chunkRec.nbytes = uint64(idxInfo.layout.size)
+			udata.chunkRec.nbytes = uint32(idxInfo.layout.size)
 			udata.chunkRec.filterMask = 0
 		}
 		udata.cb = chunkCb
@@ -387,7 +387,7 @@ func (f *File) dFarrayIdxIterate(layout *h5oLayout, pline *h5oPline, maxDims []u
 		return err
 	}
 	err = h5dFarrayIdxIterate(idxInfo, func(rec *h5dChunkRec) error {
-		return cb(append([]uint64(nil), rec.scaled...), rec.chunkAddr, rec.nbytes, rec.filterMask)
+		return cb(append([]uint64(nil), rec.scaled...), rec.chunkAddr, uint64(rec.nbytes), rec.filterMask)
 	})
 	if errors.Is(err, errBIterStop) {
 		return nil
