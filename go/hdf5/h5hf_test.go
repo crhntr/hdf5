@@ -569,10 +569,6 @@ func TestFractalHeapHugeObjects(t *testing.T) {
 	}
 	for _, huge := range []uint64{1, 2} {
 		obj, err := fh.read(hugeID(hdr, huge))
-		if errors.Is(err, ErrUnsupported) {
-			t.Logf("huge object %d: %v (v2 B-tree not translated yet)", huge, err)
-			continue
-		}
 		require.NoError(t, err)
 		l, err := parseLink(obj, int(f.sizeofAddr))
 		require.NoError(t, err)
@@ -601,20 +597,33 @@ func TestFractalHeapHugeObjects(t *testing.T) {
 		assert.Equal(t, binary.LittleEndian.AppendUint32(nil, uint32(i*i)), attrs[fmt.Sprintf("a%02d", i)])
 	}
 	obj, err := fh2.read(hugeID(fh2.hdr, 1))
-	if errors.Is(err, ErrUnsupported) {
-		t.Logf("huge attribute: %v (v2 B-tree not translated yet)", err)
-	} else {
-		require.NoError(t, err)
-		a, err := parseAttr(obj, int(f.sizeofSize))
-		require.NoError(t, err)
-		assert.Equal(t, "big", a.name)
-		require.Len(t, a.data, 8000)
-		for i, v := range a.data {
-			if v != byte(i%251) {
-				t.Fatalf("big[%d] = %d", i, v)
-			}
+	require.NoError(t, err)
+	a, err := parseAttr(obj, int(f.sizeofSize))
+	require.NoError(t, err)
+	assert.Equal(t, "big", a.name)
+	require.Len(t, a.data, 8000)
+	for i, v := range a.data {
+		if v != byte(i%251) {
+			t.Fatalf("big[%d] = %d", i, v)
 		}
 	}
+
+	// The 'huge' object lengths and offsets come from the v2 B-tree too.
+	var total uint64
+	for _, huge := range []uint64{1, 2} {
+		n, err := fh.objLen(hugeID(hdr, huge))
+		require.NoError(t, err)
+		obj, err := fh.read(hugeID(hdr, huge))
+		require.NoError(t, err)
+		assert.EqualValues(t, len(obj), n)
+		total += n
+		off, err := fh.objOff(hugeID(hdr, huge))
+		require.NoError(t, err)
+		assert.NotZero(t, off)
+	}
+	assert.Equal(t, hdr.hugeSize, total)
+	_, err = fh.read(hugeID(hdr, 3))
+	assert.True(t, IsNotFound(err), "missing 'huge' object: %v", err)
 }
 
 func TestFractalHeapFiltered(t *testing.T) {
@@ -671,9 +680,15 @@ func TestFractalHeapFiltered(t *testing.T) {
 		assert.Equal(t, "link000", l.name)
 		assert.Equal(t, "/target000", l.value)
 	}
-	_, err = fh.read(hugeID(hdr, 1))
-	if !errors.Is(err, ErrUnsupported) {
+	obj, err = fh.read(hugeID(hdr, 1))
+	if errors.Is(err, ErrUnsupported) {
+		t.Logf("filtered 'huge' object: %v (filters not translated yet)", err)
+	} else {
 		require.NoError(t, err)
+		l, err := parseLink(obj, int(f.sizeofAddr))
+		require.NoError(t, err)
+		assert.Equal(t, strings.Repeat("n", 5000), l.name)
+		assert.Equal(t, "/short", l.value)
 	}
 }
 
