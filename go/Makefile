@@ -13,7 +13,7 @@ test-pure:
 	go test ./h5 ./hdf5
 
 test-cgo:
-	go test ./chdf5 ./conformance
+	go test ./chdf5 $(if $(wildcard conformance),./conformance)
 
 vet:
 	go vet ./...
