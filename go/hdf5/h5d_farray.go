@@ -323,7 +323,10 @@ func h5dFarrayIdxIterate(idxInfo *h5dFarrayIdxInfo, chunkCb func(rec *h5dChunkRe
 	faStat := fa.getStats()
 
 	/* Check if there are any array elements */
-	if faStat.nelmts > 0 {
+	/* (without a data block every element is the fill value, i.e. an
+	 *  undefined chunk address: nothing to visit, and nelmts is not bounded
+	 *  by the file size) */
+	if faStat.nelmts > 0 && addrDefined(fa.hdr.dblkAddr) {
 		/* Initialize userdata */
 		udata := h5dFarrayItUd{layout: idxInfo.layout}
 		udata.chunkRec.scaled = make([]uint64, idxInfo.layout.ndims-1)

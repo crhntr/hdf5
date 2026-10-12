@@ -203,6 +203,27 @@ func h5eaCacheHdrDeserialize(f *File, img []byte, addr haddr, cls *h5eaClass, ct
 		return nil, errorf(H5E_EARRAY, H5E_BADSIZE, "bad extensible array header size")
 	}
 
+	/* Sanity check the array statistics */
+	/* (not checked by the C code, which trusts them. The elements
+	 *  'realized' live in the index block and in allocated data blocks, so
+	 *  they, and the blocks holding them, must fit in the file; the max.
+	 *  index set can be larger (sparse arrays) but not beyond the max. # of
+	 *  elements the header allows. Iteration skips unallocated blocks, see
+	 *  h5ea.iterateAllocated.) */
+	eof := f.eof()
+	if hdr.nelmts > eof/uint64(hdr.eltSize) {
+		return nil, errorf(H5E_EARRAY, H5E_BADVALUE, "# of extensible array elements realized (%d) larger than the file", hdr.nelmts)
+	}
+	if hdr.maxNelmtsBits < 64 && hdr.nelmts > uint64(1)<<hdr.maxNelmtsBits {
+		return nil, errorf(H5E_EARRAY, H5E_BADVALUE, "# of extensible array elements realized (%d) larger than the max. # of elements", hdr.nelmts)
+	}
+	if hdr.maxNelmtsBits < 64 && hdr.maxIdxSet > uint64(1)<<hdr.maxNelmtsBits {
+		return nil, errorf(H5E_EARRAY, H5E_BADVALUE, "extensible array max. index set (%d) larger than the max. # of elements", hdr.maxIdxSet)
+	}
+	if hdr.nsuperBlks > hdr.nsblks || hdr.ndataBlks > eof || hdr.superBlkSize > eof || hdr.dataBlkSize > eof {
+		return nil, errorf(H5E_EARRAY, H5E_BADVALUE, "extensible array block statistics larger than the file")
+	}
+
 	/* Index block statistics */
 	/* (computed after H5EA__hdr_init here: the index block size depends on
 	 *  the number of super blocks it computes) */

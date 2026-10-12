@@ -827,8 +827,7 @@ func TestDatasetCorrupt(t *testing.T) {
 					}
 					_, _ = ds.layoutInfo()
 					_, _ = ds.fillValue(f)
-					/* (no storageSize: iterating a corrupt extensible array
-					 *  index can take very long, see h5d_earray.go) */
+					_ = ds.storageSize(f)
 					if ds.space.extent.nelem*ds.typ.Size < 1<<24 {
 						_, _ = f.dReadValues(ds, nil)
 					}

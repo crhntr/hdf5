@@ -172,6 +172,12 @@ func h5faCacheHdrDeserialize(f *File, img []byte, addr haddr, cls *h5faClass, ct
 
 	/* Check for data block */
 	if addrDefined(hdr.dblkAddr) {
+		/* (an allocated data block holds all the elements, so they must fit
+		 *  in the file; this bounds the iteration over them) */
+		if hdr.nelmts > f.eof()/uint64(hdr.eltSize) {
+			return nil, errorf(H5E_FARRAY, H5E_BADVALUE, "# of fixed array elements (%d) larger than the file", hdr.nelmts)
+		}
+
 		/* Set up fake data block for computing size on disk */
 		dblock := h5faDblock{hdr: hdr}
 		dblkPageNelmts := uint64(1) << hdr.maxDblkPageNelmtsBits /* # of elements per data block page */

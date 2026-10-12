@@ -416,7 +416,36 @@ type h5dEarrayItUd struct {
 
 // h5dEarrayIdxIterateCb is H5D__earray_idx_iterate_cb: callback routine for
 // extensible array element iteration.
-func h5dEarrayIdxIterateCb(elmt any, udata *h5dEarrayItUd) error {
+func h5dEarrayIdxIterateCb(idx uint64, elmt any, udata *h5dEarrayItUd) error {
+	/* Compute the coordinates of the chunk in dataset */
+	/* (Deviation from the C code, which steps the coordinates from one
+	 *  element to the next: only the elements of allocated blocks are
+	 *  visited here, so the coordinates are computed from the element index.
+	 *  The array is ordered by the swizzled coordinates when the unlimited
+	 *  dimension is not the slowest-changing one, so unravel the index over
+	 *  those and unswizzle the result. This also fixes the C stepping, which
+	 *  gets the coordinates of all but the first chunks wrong in that case.) */
+	ndims := udata.layout.ndims - 1
+	scaled := udata.chunkRec.scaled
+	maxChunks := udata.layout.maxChunks
+	if udata.layout.unlimDim > 0 {
+		maxChunks = udata.layout.swizzledMaxChunks
+	}
+	rem := idx
+	for currDim := ndims - 1; currDim >= 0; currDim-- {
+		if maxChunks[currDim] == 0 {
+			return errorf(H5E_DATASET, H5E_BADVALUE, "chunk index dimension %d has no chunks", currDim)
+		}
+		scaled[currDim] = rem % maxChunks[currDim]
+		rem /= maxChunks[currDim]
+	}
+	if rem != 0 {
+		return errorf(H5E_DATASET, H5E_BADRANGE, "extensible array element %d beyond the dataset's chunks", idx)
+	}
+	if udata.layout.unlimDim > 0 {
+		h5vmUnswizzleCoords(scaled, udata.layout.unlimDim)
+	}
+
 	/* Compose generic chunk record for callback */
 	if udata.filtered {
 		filtElmt, ok := elmt.(h5dEarrayFiltElmt)
@@ -442,37 +471,6 @@ func h5dEarrayIdxIterateCb(elmt any, udata *h5dEarrayItUd) error {
 			}
 			return wrapf(err, H5E_DATASET, H5E_CALLBACK, "failure in generic chunk iterator callback")
 		}
-	}
-
-	/* Update coordinates of chunk in dataset */
-	ndims := udata.layout.ndims - 1
-	scaled := udata.chunkRec.scaled
-	maxChunks := udata.layout.maxChunks
-	if udata.layout.unlimDim > 0 {
-		/* (Deviation from the C code, which steps the unswizzled
-		 *  coordinates: the array is ordered by the swizzled coordinates
-		 *  when the unlimited dimension is not the slowest-changing one, so
-		 *  step those and unswizzle the result. With the C stepping the
-		 *  coordinates of all but the first chunks are wrong.) */
-		h5vmSwizzleCoords(scaled, udata.layout.unlimDim)
-		maxChunks = udata.layout.swizzledMaxChunks
-	}
-	currDim := ndims - 1
-	for currDim >= 0 {
-		/* Increment coordinate in current dimension */
-		scaled[currDim]++
-
-		/* Check if we went off the end of the current dimension */
-		if scaled[currDim] >= maxChunks[currDim] {
-			/* Reset coordinate & move to next faster dimension */
-			scaled[currDim] = 0
-			currDim--
-		} else {
-			break
-		}
-	}
-	if udata.layout.unlimDim > 0 {
-		h5vmUnswizzleCoords(scaled, udata.layout.unlimDim)
 	}
 
 	return nil
@@ -508,8 +506,11 @@ func h5dEarrayIdxIterate(idxInfo *h5dEarrayIdxInfo, chunkCb func(rec *h5dChunkRe
 		udata.cb = chunkCb
 
 		/* Iterate over the extensible array elements */
-		if err := ea.iterate(func(_ uint64, elmt any) error {
-			return h5dEarrayIdxIterateCb(elmt, &udata)
+		/* (only the elements of allocated blocks: the others are fill
+		 *  values, i.e. undefined chunk addresses, and a corrupt max. index
+		 *  set must not make the iteration run for ever) */
+		if err := ea.iterateAllocated(func(idx uint64, elmt any) error {
+			return h5dEarrayIdxIterateCb(idx, elmt, &udata)
 		}); err != nil {
 			return wrapf(err, H5E_DATASET, H5E_BADITER, "unable to iterate over fixed array chunk index")
 		}

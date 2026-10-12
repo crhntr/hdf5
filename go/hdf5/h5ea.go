@@ -12,7 +12,10 @@ package hdf5
 // a 'page init' bitmap per data block; the pages of a paged data block follow
 // the data block prefix in the file and each carries its own checksum.
 
-import "errors"
+import (
+	"errors"
+	"math"
+)
 
 /**************************/
 /* Package Private Macros */
@@ -357,31 +360,31 @@ func (ea *h5ea) getAddr() haddr {
 // element buffer of the metadata object holding a given element in the
 // array, and the index of the element in that buffer. A nil buffer means
 // the object holding the element has not been created yet.
-func h5eaLookupElmt(ea *h5ea, idx uint64) (thingElmtBuf []any, thingElmtIdx uint64, err error) {
+func h5eaLookupElmt(ea *h5ea, idx uint64) (thingElmtBuf []any, thingElmtIdx uint64, span uint64, err error) {
 	hdr := ea.hdr /* Header for EA */
 
 	/* Check if we should create the index block */
 	if !addrDefined(hdr.idxBlkAddr) {
-		/* (read-only access: nothing to look up) */
-		return nil, 0, nil
+		/* (read-only access: nothing to look up; no element exists) */
+		return nil, 0, math.MaxUint64, nil
 	}
 
 	/* Protect index block */
 	iblock, err := h5eaIblockProtect(hdr)
 	if err != nil {
-		return nil, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array index block, address = %d", hdr.idxBlkAddr)
+		return nil, 0, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array index block, address = %d", hdr.idxBlkAddr)
 	}
 
 	/* Check if element is in index block */
 	if idx < uint64(hdr.idxBlkElmts) {
 		/* Set 'thing' info to refer to the index block */
-		return iblock.elmts, idx, nil
+		return iblock.elmts, idx, 0, nil
 	}
 
 	/* Get super block index where element is located */
 	sblkIdx := h5eaDblockSblkIdx(hdr, idx)
 	if sblkIdx >= hdr.nsblks {
-		return nil, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array index %d beyond the array's maximum size", idx)
+		return nil, 0, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array index %d beyond the array's maximum size", idx)
 	}
 	info := &hdr.sblkInfo[sblkIdx]
 
@@ -393,19 +396,19 @@ func h5eaLookupElmt(ea *h5ea, idx uint64) (thingElmtBuf []any, thingElmtIdx uint
 		/* Compute the data block index in index block */
 		dblkIdx := info.startDblk + (elmtIdx / info.dblkNelmts)
 		if dblkIdx >= iblock.ndblkAddrs {
-			return nil, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array data block index %d out of range", dblkIdx)
+			return nil, 0, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array data block index %d out of range", dblkIdx)
 		}
 
 		/* Check if the data block has been allocated on disk yet */
 		if !addrDefined(iblock.dblkAddrs[dblkIdx]) {
-			/* (read-only access) */
-			return nil, 0, nil
+			/* (read-only access; the rest of the data block is unallocated) */
+			return nil, 0, info.dblkNelmts - elmtIdx%info.dblkNelmts, nil
 		}
 
 		/* Protect data block */
 		dblock, err := h5eaDblockProtect(hdr, iblock.dblkAddrs[dblkIdx], info.dblkNelmts)
 		if err != nil {
-			return nil, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array data block, address = %d", iblock.dblkAddrs[dblkIdx])
+			return nil, 0, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array data block, address = %d", iblock.dblkAddrs[dblkIdx])
 		}
 
 		/* Adjust index to offset in data block */
@@ -414,41 +417,41 @@ func h5eaLookupElmt(ea *h5ea, idx uint64) (thingElmtBuf []any, thingElmtIdx uint
 		/* (a data block reached through the index block is never paged:
 		 *  its size is below the first super block's) */
 		if dblock.npages > 0 {
-			return nil, 0, errorf(H5E_EARRAY, H5E_BADVALUE, "paged extensible array data block in index block")
+			return nil, 0, 0, errorf(H5E_EARRAY, H5E_BADVALUE, "paged extensible array data block in index block")
 		}
 
 		/* Set 'thing' info to refer to the data block */
-		return dblock.elmts, elmtIdx, nil
+		return dblock.elmts, elmtIdx, 0, nil
 	}
 
 	/* Calculate offset of super block in index block's array */
 	sblkOff := sblkIdx - iblock.nsblks
 	if sblkOff >= iblock.nsblkAddrs {
-		return nil, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array super block index %d out of range", sblkIdx)
+		return nil, 0, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array super block index %d out of range", sblkIdx)
 	}
 
 	/* Check if the super block has been allocated on disk yet */
 	if !addrDefined(iblock.sblkAddrs[sblkOff]) {
-		/* (read-only access) */
-		return nil, 0, nil
+		/* (read-only access; the rest of the super block is unallocated) */
+		return nil, 0, info.ndblks*info.dblkNelmts - elmtIdx, nil
 	}
 
 	/* Protect super block */
 	sblock, err := h5eaSblockProtect(hdr, iblock.sblkAddrs[sblkOff], sblkIdx)
 	if err != nil {
-		return nil, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array super block, address = %d", iblock.sblkAddrs[sblkOff])
+		return nil, 0, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array super block, address = %d", iblock.sblkAddrs[sblkOff])
 	}
 
 	/* Compute the data block index in super block */
 	dblkIdx := elmtIdx / sblock.dblkNelmts
 	if dblkIdx >= sblock.ndblks {
-		return nil, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array data block index %d out of range", dblkIdx)
+		return nil, 0, 0, errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array data block index %d out of range", dblkIdx)
 	}
 
 	/* Check if the data block has been allocated on disk yet */
 	if !addrDefined(sblock.dblkAddrs[dblkIdx]) {
-		/* (read-only access) */
-		return nil, 0, nil
+		/* (read-only access; the rest of the data block is unallocated) */
+		return nil, 0, sblock.dblkNelmts - elmtIdx%sblock.dblkNelmts, nil
 	}
 
 	/* Adjust index to offset in data block */
@@ -471,28 +474,28 @@ func h5eaLookupElmt(ea *h5ea, idx uint64) (thingElmtBuf []any, thingElmtIdx uint
 
 		/* Check if page has been initialized yet */
 		if !h5vmBitGet(sblock.pageInit, pageInitIdx) {
-			/* (read-only access) */
-			return nil, 0, nil
+			/* (read-only access; the rest of the page is unallocated) */
+			return nil, 0, hdr.dblkPageNelmts - elmtIdx%hdr.dblkPageNelmts, nil
 		}
 
 		/* Protect data block page */
 		dblkPage, err := h5eaDblkPageProtect(hdr, dblkPageAddr)
 		if err != nil {
-			return nil, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array data block page, address = %d", dblkPageAddr)
+			return nil, 0, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array data block page, address = %d", dblkPageAddr)
 		}
 
 		/* Set 'thing' info to refer to the data block page */
-		return dblkPage.elmts, elmtIdx, nil
+		return dblkPage.elmts, elmtIdx, 0, nil
 	}
 
 	/* Protect data block */
 	dblock, err := h5eaDblockProtect(hdr, sblock.dblkAddrs[dblkIdx], sblock.dblkNelmts)
 	if err != nil {
-		return nil, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array data block, address = %d", sblock.dblkAddrs[dblkIdx])
+		return nil, 0, 0, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect extensible array data block, address = %d", sblock.dblkAddrs[dblkIdx])
 	}
 
 	/* Set 'thing' info to refer to the data block */
-	return dblock.elmts, elmtIdx, nil
+	return dblock.elmts, elmtIdx, 0, nil
 }
 
 // get is H5EA_get: the decoded element at idx (cls.fill(ctx) when the
@@ -507,7 +510,7 @@ func (ea *h5ea) get(idx uint64) (any, error) {
 	}
 
 	/* Look up the array metadata containing the element we want to set */
-	thingElmtBuf, thingElmtIdx, err := h5eaLookupElmt(ea, idx)
+	thingElmtBuf, thingElmtIdx, _, err := h5eaLookupElmt(ea, idx)
 	if err != nil {
 		return nil, wrapf(err, H5E_EARRAY, H5E_CANTPROTECT, "unable to protect array metadata")
 	}
@@ -543,6 +546,45 @@ func (ea *h5ea) iterate(op func(idx uint64, elmt any) error) error {
 				return nil
 			}
 			return wrapf(err, H5E_EARRAY, H5E_BADITER, "iteration callback error")
+		}
+	}
+	return nil
+}
+
+// iterateAllocated is like iterate but only visits the elements stored in
+// allocated index / data blocks and pages, skipping the (fill value)
+// elements of the blocks that do not exist yet in one step. Its work is
+// bounded by the metadata present in the file, not by max_idx_set. op may
+// return errBIterStop to stop early without error.
+func (ea *h5ea) iterateAllocated(op func(idx uint64, elmt any) error) error {
+	hdr := ea.hdr
+	for u := uint64(0); u < hdr.maxIdxSet; {
+		/* Look up the array metadata containing the element */
+		buf, bufIdx, span, err := h5eaLookupElmt(ea, u)
+		if err != nil {
+			return wrapf(err, H5E_EARRAY, H5E_CANTGET, "unable to protect array metadata")
+		}
+
+		/* Skip the part of the array whose block has not been allocated */
+		if buf == nil {
+			if span == 0 || span > hdr.maxIdxSet-u {
+				break
+			}
+			u += span
+			continue
+		}
+		if bufIdx >= uint64(len(buf)) {
+			return wrapf(errorf(H5E_EARRAY, H5E_BADRANGE, "extensible array element index %d out of range", bufIdx), H5E_EARRAY, H5E_CANTGET, "unable to get element")
+		}
+
+		/* Visit the rest of the elements of this block (page) */
+		for ; bufIdx < uint64(len(buf)) && u < hdr.maxIdxSet; bufIdx, u = bufIdx+1, u+1 {
+			if err := op(u, buf[bufIdx]); err != nil {
+				if errors.Is(err, errBIterStop) {
+					return nil
+				}
+				return wrapf(err, H5E_EARRAY, H5E_BADITER, "iteration callback error")
+			}
 		}
 	}
 	return nil
