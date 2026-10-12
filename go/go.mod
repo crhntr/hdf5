@@ -1,6 +1,6 @@
 module github.com/HDFGroup/hdf5/go
 
-go 1.24
+go 1.27
 
 require github.com/stretchr/testify v1.12.1
 
