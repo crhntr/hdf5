@@ -1,10 +1,17 @@
 # Go API shared by `hdf5` (pure Go) and `chdf5` (cgo)
 
+In this document `hdf5` is the pure Go reader, `github.com/crhntr/hdf5/go`,
+and `chdf5` is the cgo wrapper around libhdf5, `github.com/crhntr/hdf5/cgo`.
+Both are `package hdf5`; `chdf5` is the name the cgo package is imported as
+where both are used (`chdf5 "github.com/crhntr/hdf5/cgo"`, as in
+`cgo/conformance`). A program switches implementations by changing only the
+import path.
+
 Both packages expose the same reading API so that `conformance` can drive
-them through one interface. Types from package `h5` are the shared
-vocabulary. Everything below is read-only; `chdf5` additionally offers a
-small writing API used to generate test fixtures (see "Package-specific
-API").
+them through one interface. Types from package `h5`
+(`github.com/crhntr/hdf5/go/h5`) are the shared vocabulary. Everything
+below is read-only; `chdf5` additionally offers a small writing API used to
+generate test fixtures (see "Package-specific API").
 
 ```go
 // Opening

@@ -1,6 +1,6 @@
 // Package h5 holds the vocabulary shared by the two Go implementations of
-// HDF5 in this module: the pure-Go reader (package hdf5) and the cgo wrapper
-// around libhdf5 (package chdf5).
+// HDF5: the pure-Go reader (github.com/crhntr/hdf5/go) and the cgo wrapper
+// around libhdf5 (github.com/crhntr/hdf5/cgo). Both are package hdf5.
 //
 // It only contains plain data descriptions of what is found in an HDF5 file
 // (datatypes, dataspaces, links, layouts, filters and decoded values). It has

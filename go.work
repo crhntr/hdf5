@@ -1,0 +1,13 @@
+go 1.27
+
+use (
+	./cgo
+	./go
+)
+
+// cgo/go.mod requires github.com/crhntr/hdf5/go at v0.0.0, which is not
+// published. Commands that load the whole module graph (go test or go vet
+// of packages importing testify, go list -m all) read the go.mod of every
+// required version, so point that version at the workspace module. Remove
+// this once cgo/go.mod requires a tagged release (go/vX.Y.Z).
+replace github.com/crhntr/hdf5/go v0.0.0 => ./go

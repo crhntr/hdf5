@@ -1,4 +1,4 @@
-module github.com/HDFGroup/hdf5/go
+module github.com/crhntr/hdf5/go
 
 go 1.27
 

@@ -120,8 +120,9 @@ const (
 //
 // The leaf fields mirror the "Datatype Message" of the file format
 // specification (and H5T_shared_t in the C library) so that the decoder in
-// package hdf5 is a faithful translation of H5O__dtype_decode_helper while the
-// same struct can be populated from the H5T* query API by package chdf5.
+// the pure Go package (github.com/crhntr/hdf5/go) is a faithful translation
+// of H5O__dtype_decode_helper while the same struct can be populated from the
+// H5T* query API by the cgo package (github.com/crhntr/hdf5/cgo).
 type Datatype struct {
 	Class   Class
 	Version uint8  // datatype message version (1..4); 0 when unknown (cgo)

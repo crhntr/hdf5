@@ -1,34 +1,52 @@
 # HDF5 for Go
 
-This directory is a Go module, `github.com/HDFGroup/hdf5/go`, with two
-implementations of HDF5 file reading that share one API:
+Two Go modules in this repository implement HDF5 file reading with one
+shared API:
 
-- `hdf5` — pure Go (no cgo), a translation of the C library in `../src`
-  into Go. Reads every file format feature of the HDF5 1.x line (superblock
-  versions 0–3, both object header versions, all datatype classes, compact /
-  contiguous / chunked / virtual layouts, every chunk index, the built-in
-  filters except szip, old-style and dense groups and attributes, shared
-  messages, external links and external data files, family and multi/split
-  driver files). Virtual datasets read their source datasets from the same
-  file or from other files located like libhdf5 does (`WithVirtualPrefix`,
-  `HDF5_VDS_PREFIX`, the directory of the file, the current directory).
-- `chdf5` — cgo bindings to the official libhdf5 (1.14.x) exposing the same
-  API, used both as an oracle for `hdf5` and as a full-featured alternative
-  where linking the C library is acceptable. It also has a small writing API
-  used to generate test files.
+- `github.com/crhntr/hdf5/go` (this directory, `package hdf5`): pure Go (no
+  cgo), a translation of the C library in `../src` into Go. Reads every file
+  format feature of the HDF5 1.x line (superblock versions 0–3, both object
+  header versions, all datatype classes, compact / contiguous / chunked /
+  virtual layouts, every chunk index, the built-in filters except szip,
+  old-style and dense groups and attributes, shared messages, external links
+  and external data files, family and multi/split driver files). Virtual
+  datasets read their source datasets from the same file or from other files
+  located like libhdf5 does (`WithVirtualPrefix`, `HDF5_VDS_PREFIX`, the
+  directory of the file, the current directory).
+- `github.com/crhntr/hdf5/cgo` (`../cgo`, also `package hdf5`): cgo bindings
+  to the official libhdf5 (1.14.x) exposing the same API, used both as an
+  oracle for the pure Go reader and as a full-featured alternative where
+  linking the C library is acceptable. It also has a small writing API used
+  to generate test files. See [../cgo/README.md](../cgo/README.md).
 
-`h5` holds the shared vocabulary (datatype, dataspace, link, layout and
-value descriptions, and the conversion of values to Go types) and
-`conformance` reads every test file in the repository with both packages
-and compares the results.
+`github.com/crhntr/hdf5/go/h5` (`h5`) holds the shared vocabulary
+(datatype, dataspace, link, layout and value descriptions, and the
+conversion of values to Go types) and `github.com/crhntr/hdf5/cgo/conformance`
+(test-only) reads every test file in the repository with both packages and
+compares the results. Where both packages are imported, the cgo one is
+named `chdf5`:
 
-See [API.md](API.md) for the API (including the fields the conformance
-suite ignores and the known differences between the packages),
+```go
+import (
+    "github.com/crhntr/hdf5/go"            // package hdf5, pure Go
+    chdf5 "github.com/crhntr/hdf5/cgo"     // package hdf5, libhdf5
+    "github.com/crhntr/hdf5/go/h5"
+)
+```
+
+The rest of the documentation calls them `hdf5` and `chdf5`. See
+[API.md](API.md) for the API (including the fields the conformance suite
+ignores and the known differences between the packages),
 [TRANSLATION.md](TRANSLATION.md) for how the C code maps onto the Go code.
 
 ## Using
 
 ```go
+import (
+    "github.com/crhntr/hdf5/go"
+    "github.com/crhntr/hdf5/go/h5"
+)
+
 f, err := hdf5.Open("data.h5")
 if err != nil { ... }
 defer f.Close()
@@ -53,30 +71,39 @@ a, err := ds.Attribute("units")
 units, err := hdf5.ReadAttribute[string](a)
 ```
 
-Replacing `hdf5` by `chdf5` in the code above gives the same results.
+Replacing the import `github.com/crhntr/hdf5/go` by
+`github.com/crhntr/hdf5/cgo` in the code above gives the same results.
 
 ## Building and testing
 
-The pure Go packages need nothing beyond the Go toolchain:
+The two modules live in `./go` and `./cgo` of the repository; the
+`go.work` file at the repository root puts both in one workspace, so the
+cgo module builds against the checked-out go module (no `replace`
+directive is needed). Outside a checkout, `github.com/crhntr/hdf5/cgo`
+fetches `github.com/crhntr/hdf5/go` from the module proxy at the version
+its go.mod requires.
 
-    go test ./h5 ./hdf5
+The pure Go module needs nothing beyond the Go toolchain:
 
-`chdf5` and `conformance` need libhdf5 1.14 and pkg-config:
+    cd go && go test ./...
 
-    PKG_CONFIG_PATH=/path/to/hdf5/lib/pkgconfig go test ./chdf5 ./conformance
+(or `make test` in this directory). The cgo module needs libhdf5 1.14 and
+pkg-config:
 
-or `make test` from this directory (see the Makefile for the HDF5_DIR
-variable). With `CGO_ENABLED=0` the cgo packages are excluded. Some tests
-of `hdf5` also compare raw data with the output of the reference `h5dump`
-when it is installed in `~/.local/hdf5-1.14.6/bin`.
+    cd cgo && PKG_CONFIG_PATH=/path/to/hdf5/lib/pkgconfig go test ./...
+
+or `make test` in `../cgo` (see its Makefile for the HDF5_DIR variable).
+With `CGO_ENABLED=0` the cgo packages are empty. Some tests of `hdf5` also
+compare raw data with the output of the reference `h5dump` when it is
+installed in `~/.local/hdf5-1.14.6/bin`.
 
 ### Conformance suite
 
-`conformance` (test-only, cgo) proves that `hdf5` reads what libhdf5
-reads, identically. For every `.h5`/`.hdf5` file of the repository
-(plus `hdf5/testdata`) it opens the file with both packages and compares
-the superblock, the whole link tree (`Walk`: paths and links), and for
-every object its info, comment, links (by name and by creation order),
+`conformance` (`../cgo/conformance`, test-only, cgo) proves that `hdf5`
+reads what libhdf5 reads, identically. For every `.h5`/`.hdf5` file of the
+repository (plus `go/testdata`) it opens the file with both packages and
+compares the superblock, the whole link tree (`Walk`: paths and links), and
+for every object its info, comment, links (by name and by creation order),
 attributes (names, datatypes, dataspaces, values, `ReadAttribute[T]`),
 committed datatypes and, for datasets, the datatype, dataspace, layout,
 filters, fill value, the values (datasets up to 64 MiB), a strided
@@ -89,9 +116,10 @@ the `chdf5` writing API in every file format variant (latest format with
 dense groups and attributes and the version 2 chunk indexes, shared
 messages, paged file space, user blocks, 4-byte addresses, external links
 between the generated files, ...). The few known, justified differences
-are on the allow-list in `conformance/allow_test.go` (see also API.md).
+are on the allow-list in `../cgo/conformance/allow_test.go` (see also
+API.md).
 
-    make conformance
+    cd ../cgo && make conformance
 
 runs it verbosely: each file logs a summary line, and each test ends with
 a table of what was compared, what both packages refuse (by reason) and

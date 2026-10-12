@@ -1,24 +1,13 @@
-# Go module build helpers. HDF5_DIR points at an installed libhdf5 1.14
-# (with lib/pkgconfig/hdf5.pc) for the cgo packages.
-HDF5_DIR ?= $(HOME)/.local/hdf5-1.14.6
-export PKG_CONFIG_PATH := $(HDF5_DIR)/lib/pkgconfig:$(PKG_CONFIG_PATH)
+# Build helpers for the pure Go module github.com/crhntr/hdf5/go. The cgo
+# module (libhdf5 wrapper and conformance suite) has its own Makefile in
+# ../cgo.
 
-.PHONY: all test test-pure test-cgo conformance vet fmt
+.PHONY: all test vet fmt
 
 all: vet test
 
-test: test-pure test-cgo
-
-test-pure:
-	go test ./h5 ./hdf5
-
-test-cgo:
-	go test ./chdf5 $(if $(wildcard conformance),./conformance)
-
-# Compare hdf5 with libhdf5 (through chdf5) over the repository corpus and
-# generated fixtures; prints the per-file summaries and the final tables.
-conformance:
-	go test -count=1 -v -run 'TestCorpus|TestExternalFilesCurrentDirectory|TestFixtures' ./conformance
+test:
+	go test ./...
 
 vet:
 	go vet ./...

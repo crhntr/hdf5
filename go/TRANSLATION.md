@@ -1,19 +1,23 @@
 # Translating HDF5 from C to Go
 
-This directory holds a Go module, `github.com/HDFGroup/hdf5/go`, with two
-implementations of HDF5 reading:
+Two Go modules in this repository implement HDF5 reading:
 
-| package      | what                                                        | dependencies            |
-|--------------|-------------------------------------------------------------|-------------------------|
-| `h5`         | shared vocabulary: datatype/dataspace/link/layout/value types | stdlib                  |
-| `hdf5`       | pure Go reader, translated from `../src`                    | stdlib (+ testify in tests) |
-| `chdf5`      | cgo wrapper around libhdf5 (1.14.x) exposing the same API   | libhdf5 via pkg-config  |
-| `conformance`| tests that read every file with both and compare            | both                    |
+| module / package                        | dir              | what                                                          | dependencies                |
+|-----------------------------------------|------------------|---------------------------------------------------------------|-----------------------------|
+| `github.com/crhntr/hdf5/go/h5`          | `go/h5`          | shared vocabulary: datatype/dataspace/link/layout/value types | stdlib                      |
+| `github.com/crhntr/hdf5/go` (`hdf5`)    | `go`             | pure Go reader, translated from `src`                         | stdlib (+ testify in tests) |
+| `github.com/crhntr/hdf5/cgo` (`chdf5`)  | `cgo`            | cgo wrapper around libhdf5 (1.14.x) exposing the same API     | libhdf5 via pkg-config      |
+| `github.com/crhntr/hdf5/cgo/conformance`| `cgo/conformance`| tests that read every file with both and compare              | both                        |
 
-## Rules for translated code (package `hdf5`)
+`github.com/crhntr/hdf5/go` and `github.com/crhntr/hdf5/cgo` are both
+`package hdf5`; where both are imported the cgo one is named `chdf5`, and
+that is how this document refers to it. Paths below are relative to the
+repository root.
 
-1. **One Go file per C file.** `src/H5Odtype.c` becomes `hdf5/h5o_dtype.go`,
-   `src/H5B2cache.c` becomes `hdf5/h5b2_cache.go`, and so on. Put a header
+## Rules for translated code (module `github.com/crhntr/hdf5/go`)
+
+1. **One Go file per C file.** `src/H5Odtype.c` becomes `go/h5o_dtype.go`,
+   `src/H5B2cache.c` becomes `go/h5b2_cache.go`, and so on. Put a header
    comment `// Translated from src/H5Odtype.c.` at the top. Read-only paths
    only: encode/serialize/insert/remove/free functions are not translated.
 2. **One Go function per C function**, in the same order, with the C name in
@@ -48,7 +52,8 @@ implementations of HDF5 reading:
    deflate, `math`, `encoding/binary`, `sort`, `strings`, `iter`, ...).
 8. **Tests** use `github.com/stretchr/testify`. Prefer tests that open files
    from the repository corpus (`corpusFiles(t)` in `corpus_test.go`, and the
-   named files under `../test/testfiles`, `../tools/test/*/testfiles`) over
+   named files under `test/testfiles`, `tools/test/*/testfiles`, opened
+   through `repoRoot(t)`, and the generated files in `go/testdata`) over
    synthetic byte arrays, and assert decoded values that can be checked with
    `h5dump` (the `.ddl` files next to the h5dump test files are its expected
    output).
@@ -64,11 +69,11 @@ The modules talk to each other through the signatures below. When a module
 is not translated yet, a stub with that exact signature exists and returns
 `ErrUnsupported`; the agent translating the module replaces the stub file.
 
-See `hdf5/h5o_types.go` for the in-core object header message structs
+See `go/h5o_types.go` for the in-core object header message structs
 (`h5oStab`, `h5oLinfo`, `h5oLayout`, ...) and the object header API,
-`hdf5/h5b2.go`, `hdf5/h5fa.go`, `hdf5/h5ea.go`, `hdf5/h5hf.go`,
-`hdf5/h5hl.go`, `hdf5/h5hg.go`, `hdf5/h5b.go`, `hdf5/h5s.go`, `hdf5/h5t.go`,
-`hdf5/h5z.go` for the module entry points.
+`go/h5b2.go`, `go/h5fa.go`, `go/h5ea.go`, `go/h5hf.go`, `go/h5hl.go`,
+`go/h5hg.go`, `go/h5b.go`, `go/h5s.go`, `go/h5t.go`, `go/h5z.go` for the
+module entry points.
 
 Iteration sentinels (from `h5b.go`): an iterate operator returns
 `errBIterStop` to stop early without error (the C `H5_ITER_STOP`), and a
@@ -86,12 +91,13 @@ reference: files, objects and data the C library refuses (deliberately
 corrupt test inputs, missing filters or external files) must fail in both,
 and a file the C library opens must open. The only differences allowed are
 the fields API.md lists as ignored and the entries of the allow-list in
-`conformance/allow_test.go`, each with its justification. `TestFixtures`
+`cgo/conformance/allow_test.go`, each with its justification. `TestFixtures`
 compares files generated with `chdf5`'s writing API to cover the
 combinations the corpus lacks. Run it with
 
-    make conformance
+    cd cgo && make conformance
 
-(or `PKG_CONFIG_PATH=... go test -v ./conformance`); `make test` runs it
-non-verbosely. A mismatch in the pure Go reader is fixed by translating the
-C code path that libhdf5 takes, not by special-casing the file.
+(or `PKG_CONFIG_PATH=... go test -v ./conformance` in `cgo`); `make test`
+in `cgo` runs it non-verbosely. A mismatch in the pure Go reader is fixed by
+translating the C code path that libhdf5 takes, not by special-casing the
+file.
