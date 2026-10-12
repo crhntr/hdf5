@@ -17,7 +17,9 @@ func ConvertValues[T any](vals []any) ([]T, error) {
 		if err != nil {
 			return nil, fmt.Errorf("element %d: %w", i, err)
 		}
-		out[i] = rv.Interface().(T)
+		// A nil canonical value converted to an interface type yields a nil
+		// interface, for which the assertion fails; leave the zero T.
+		out[i], _ = rv.Interface().(T)
 	}
 	return out, nil
 }
@@ -88,6 +90,9 @@ func convertValue(v any, rt reflect.Type) (reflect.Value, error) {
 		if err != nil {
 			return reflect.Value{}, err
 		}
+		if i != 0 && i != 1 {
+			return reflect.Value{}, fmt.Errorf("value %d is not 0 or 1, cannot convert to %s", i, rt)
+		}
 		return reflect.ValueOf(i != 0).Convert(rt), nil
 	case reflect.String:
 		switch s := v.(type) {
@@ -148,8 +153,15 @@ func convertValue(v any, rt reflect.Type) (reflect.Value, error) {
 		}
 		return out, nil
 	}
-	if v != nil && reflect.TypeOf(v).ConvertibleTo(rt) {
-		return reflect.ValueOf(v).Convert(rt), nil
+	// Fall back to a Go conversion, except the lossy ones reflect permits:
+	// integer -> string (yields a rune) and string -> []rune/[]byte-like slices.
+	if v != nil {
+		vt := reflect.TypeOf(v)
+		lossy := (rt.Kind() == reflect.String && vt.Kind() != reflect.String) ||
+			(vt.Kind() == reflect.String && rt.Kind() == reflect.Slice)
+		if !lossy && vt.ConvertibleTo(rt) {
+			return reflect.ValueOf(v).Convert(rt), nil
+		}
 	}
 	return reflect.Value{}, fmt.Errorf("cannot convert %T to %s", v, rt)
 }
