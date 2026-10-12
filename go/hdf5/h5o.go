@@ -1,30 +1,40 @@
 package hdf5
 
-// STUB — to be replaced by the translation of src/H5Ocache.c, src/H5Oint.c,
-// src/H5Omessage.c, src/H5Oshared.c and the per-message H5O*.c files.
+// Translated from src/H5O.c (read side only). The public H5O API functions
+// are thin wrappers that locate the object and call into src/H5Oint.c; the
+// internal equivalents of the read-only ones are below. The object header
+// machinery itself is in h5o_cache.go (src/H5Ocache.c), h5o_int.go
+// (src/H5Oint.c), h5o_message.go (src/H5Omessage.c), h5o_shared.go
+// (src/H5Oshared.c) and the per-message h5o_*.go files.
 
-// oProtect is H5O_protect: load (through the cache) the object header at
-// addr, including continuation chunks. Messages are decoded lazily by
-// msgRead.
-func (f *File) oProtect(addr haddr) (*h5o, error) {
-	return nil, errorf(H5E_OHDR, H5E_UNSUPPORTED, "object headers not translated yet")
+import "github.com/HDFGroup/hdf5/go/h5"
+
+// oGetInfoByAddr is the core of H5Oget_info3 / H5Oget_info_by_name3 once the
+// object has been located: the object information for the object header at
+// addr.
+func (f *File) oGetInfoByAddr(addr haddr) (h5.ObjectInfo, error) {
+	/* Retrieve the object's information */
+	oh, err := f.oProtect(addr)
+	if err != nil {
+		return h5.ObjectInfo{}, wrapf(err, H5E_OHDR, H5E_CANTPROTECT, "unable to load object header")
+	}
+	info, err := f.oGetInfo(oh)
+	if err != nil {
+		return h5.ObjectInfo{}, wrapf(err, H5E_OHDR, H5E_CANTGET, "can't retrieve object info")
+	}
+	return info, nil
 }
 
-// msgExists is H5O_msg_exists_oh.
-func (f *File) msgExists(oh *h5o, typeID uint16) bool { return false }
-
-// msgCount is H5O_msg_count.
-func (f *File) msgCount(oh *h5o, typeID uint16) int { return 0 }
-
-// msgRead is H5O_msg_read_oh: decode (resolving shared messages) and return
-// the first message of the given type as one of the h5o* structs in
-// h5o_types.go. Returns ErrNotFound when the header has no such message.
-func (f *File) msgRead(oh *h5o, typeID uint16) (any, error) {
-	return nil, errorf(H5E_OHDR, H5E_UNSUPPORTED, "object headers not translated yet")
-}
-
-// msgIterate is H5O_msg_iterate: decode and visit every message of the given
-// type, in header order.
-func (f *File) msgIterate(oh *h5o, typeID uint16, op func(msg *h5oMesg, native any) error) error {
-	return errorf(H5E_OHDR, H5E_UNSUPPORTED, "object headers not translated yet")
+// oGetComment is the core of H5Oget_comment (H5G_loc_get_comment): the
+// object's comment (name message), and false when it has none.
+func (f *File) oGetComment(oh *h5o) (string, bool, error) {
+	/* Get the comment, if there is one */
+	if !f.msgExists(oh, h5oNameID) {
+		return "", false, nil
+	}
+	v, err := f.msgRead(oh, h5oNameID)
+	if err != nil {
+		return "", false, wrapf(err, H5E_OHDR, H5E_CANTGET, "can't get comment")
+	}
+	return string(v.(h5oName)), true, nil
 }

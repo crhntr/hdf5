@@ -371,7 +371,7 @@ type h5oFsinfo struct {
 	pageSize       uint64
 	pgendMetaThres uint16
 	eoa            haddr
-	fsAddr         [7]haddr
+	fsAddr         [12]haddr /* H5F_MEM_PAGE_NTYPES - 1 addresses of free-space managers */
 }
 
 // h5oRefcount is H5O_refcount_t.
