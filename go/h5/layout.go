@@ -56,6 +56,21 @@ type Layout struct {
 
 	// External files (External Data Files message), contiguous only.
 	External []ExternalFile
+
+	// Virtual: the source mappings, in mapping order.
+	Virtual []VirtualMapping
+}
+
+// VirtualMapping is one mapping of a virtual dataset: the elements of the
+// virtual dataset selected by VirtualSelection come from the elements
+// selected by SourceSelection of SourceDataset in SourceFile ("." for the
+// same file). Unlimited hyperslab selections are described by
+// Selection.Unlimited.
+type VirtualMapping struct {
+	SourceFile       string
+	SourceDataset    string
+	SourceSelection  Selection
+	VirtualSelection Selection
 }
 
 // ExternalFile is one entry of the External Data Files message.

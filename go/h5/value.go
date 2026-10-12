@@ -78,6 +78,12 @@ type Selection struct {
 	Rank   int
 	Blocks [][2][]uint64 // for SelHyperslab: {start, end} pairs
 	Points [][]uint64    // for SelPoints
+
+	// Unlimited is set instead of Blocks for a hyperslab selection with an
+	// unlimited count or block (virtual dataset mappings), which has no
+	// block list: the regular hyperslab, with Unlimited entries in Count or
+	// Block (Stride and Block are always set).
+	Unlimited *Hyperslab
 }
 
 // AttrRef is a decoded attribute reference (HDF5 1.12+ H5R_ATTR): the
