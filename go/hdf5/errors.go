@@ -22,6 +22,8 @@ const (
 	H5E_DATATYPE  errMajor = "H5E_DATATYPE"
 	H5E_DATASPACE errMajor = "H5E_DATASPACE"
 	H5E_DATASET   errMajor = "H5E_DATASET"
+	H5E_EFL       errMajor = "H5E_EFL"
+	H5E_PLIST     errMajor = "H5E_PLIST"
 	H5E_ATTR      errMajor = "H5E_ATTR"
 	H5E_LINK      errMajor = "H5E_LINK"
 	H5E_PLINE     errMajor = "H5E_PLINE"
