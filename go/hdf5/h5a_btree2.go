@@ -19,10 +19,6 @@ package hdf5
 
 import "strings"
 
-// H5O_FHEAP_ID_LEN: size of a fractal heap ID for shared messages and
-// attributes (H5O_fheap_id_t).
-const h5oFheapIDLen = 8
-
 // h5aDenseBt2NameRec is H5A_dense_bt2_name_rec_t: native 'name' field index
 // records in the v2 B-tree.
 type h5aDenseBt2NameRec struct {
