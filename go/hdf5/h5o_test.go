@@ -191,6 +191,7 @@ func TestObjectHeaderCorpus(t *testing.T) {
 
 	var clean, withErrs, openFail, skipped int
 	totals := map[uint16]int{}
+	cleanFiles := map[string]bool{}
 	for _, path := range files {
 		rel, _ := filepath.Rel(root, path)
 		known := h5dumpFailures[rel]
@@ -221,6 +222,7 @@ func TestObjectHeaderCorpus(t *testing.T) {
 			}
 			if len(res.errs) == 0 {
 				clean++
+				cleanFiles[rel] = true
 				return
 			}
 			withErrs++
@@ -250,5 +252,8 @@ func TestObjectHeaderCorpus(t *testing.T) {
 	t.Logf("corpus: %d files, %d clean, %d with decode errors, %d open failures, %d skipped (h5dump fails or not HDF5)", len(files), clean, withErrs, openFail, skipped)
 	t.Logf("decoded messages by type:%s", sb.String())
 	assert.Zero(t, openFail)
-	assert.GreaterOrEqual(t, clean, 360)
+	assert.GreaterOrEqual(t, clean, 373)
+	// Datasets and attributes with datatypes and dataspaces shared through
+	// the shared object header message heap.
+	assert.True(t, cleanFiles["tools/test/h5stat/testfiles/h5stat_tsohm.h5"], "h5stat_tsohm.h5 must decode")
 }

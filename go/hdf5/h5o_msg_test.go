@@ -562,9 +562,10 @@ func TestSmallMessageDecoders(t *testing.T) {
 	_, err = h5oLinkDecode(f, f.newImage([]byte{1, 0x08, 1, 3, 'a', 'b', 'c', 9, 0, '/'}))
 	assert.ErrorIs(t, err, ErrOverflow)
 
-	// A SOHM-shared message goes to the shared message module.
+	// A SOHM-shared message goes to the shared message module, which
+	// fails cleanly on a file without a shared message table.
 	_, err = f.h5oSharedRead(nil, &h5oShared{typ: h5oShareTypeSohm, heapID: make([]byte, 8)}, h5oDtypeID)
-	assert.ErrorIs(t, err, ErrUnsupported)
+	assert.ErrorIs(t, err, &Error{Major: H5E_SOHM, Minor: H5E_BADVALUE})
 }
 
 func TestObjectHeaderCorruption(t *testing.T) {
