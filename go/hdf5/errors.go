@@ -98,6 +98,8 @@ const (
 	H5E_CANTSORT      errMinor = "H5E_CANTSORT"
 	H5E_NOTREGISTERED errMinor = "H5E_NOTREGISTERED"
 	H5E_PATH          errMinor = "H5E_PATH"
+	H5E_CANTFIND      errMinor = "H5E_CANTFIND"
+	H5E_BADSELECT     errMinor = "H5E_BADSELECT"
 )
 
 // Error is the error type returned by this package. It carries the HDF5 error
