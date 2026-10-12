@@ -324,9 +324,7 @@ func TestDatasetCorpusSweep(t *testing.T) {
 					return
 				}
 				if layout.Class == h5.LayoutVirtual {
-					/* (the source dataset lookup is stubbed: use the
-					 *  test opener, as H5Dget_space does refresh the extent) */
-					ds.virt.openSource = testVdsOpener(t)
+					/* (H5Dget_space refreshes the extent) */
 					if _, err := f.h5dGetSpace(ds); err != nil {
 						failures = append(failures, fmt.Sprintf("%s: virtual extent: %v", name, err))
 						return

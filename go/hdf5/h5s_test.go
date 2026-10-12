@@ -628,11 +628,14 @@ func TestSelectionCorpusRegionRefs(t *testing.T) {
 	assert.Equal(t, pointList, vals[1].(h5.RegionRef).Selection)
 
 	// trefer_reg.h5 /Dataset1: revised region references; the third and
-	// fourth are unlimited selections (no block list).
+	// fourth are unlimited selections (no block list: described by the
+	// regular hyperslab).
 	_, vals = corpusValues(t, "trefer_reg.h5", 531, 8, 2148, 4)
 	assert.Equal(t, block, vals[0].(h5.RegionRef).Selection)
 	assert.Equal(t, pointList, vals[1].(h5.RegionRef).Selection)
-	assert.Equal(t, h5.Selection{Type: h5.SelHyperslab, Rank: 2}, vals[2].(h5.RegionRef).Selection)
+	assert.Equal(t, h5.Selection{Type: h5.SelHyperslab, Rank: 2, Unlimited: &h5.Hyperslab{
+		Start: []uint64{1, 8}, Stride: []uint64{4, 1}, Count: []uint64{h5.Unlimited, 1}, Block: []uint64{2, 2},
+	}}, vals[2].(h5.RegionRef).Selection)
 
 	// trefer_reg_1d.h5 /Dataset1: a strided 1D hyperslab and points.
 	_, vals = corpusValues(t, "trefer_reg_1d.h5", 531, 8, 2148, 2)

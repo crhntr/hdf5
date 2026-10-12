@@ -8,6 +8,7 @@ package hdf5
 import (
 	"errors"
 	"iter"
+	"sync"
 
 	"github.com/HDFGroup/hdf5/go/h5"
 )
@@ -32,12 +33,22 @@ type Object interface {
 	Comment() (string, error)
 }
 
-// Dataset is a dataset. The dataset methods are in dataset.go.
+// Dataset is a dataset. The dataset methods are in dataset.go. A Dataset
+// is safe for concurrent use.
 type Dataset struct {
 	f    *File  // file holding the dataset (an external file when opened through an external link)
 	oh   *h5o   // the dataset's object header (cached; must not be modified)
 	addr haddr  // address of the object header
 	path string // path the dataset was opened by ("" when opened by address)
+
+	// The in-core dataset (H5D_shared_t), opened on first use.
+	open    sync.Once
+	shared  *h5dShared
+	openErr error
+
+	// mu serializes the uses of shared: reading a virtual dataset opens
+	// source datasets and patches the mapping selections in place.
+	mu sync.Mutex
 }
 
 // Datatype is a committed (named) datatype.

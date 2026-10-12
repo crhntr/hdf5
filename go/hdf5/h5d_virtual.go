@@ -16,18 +16,21 @@ package hdf5
 // straight into the destination buffer, and fills the elements that no
 // mapping covers with the fill value.
 //
-// The source datasets are opened through dVirtualOpenSource (see
-// h5d_virtual_stub.go), which needs the group traversal of the public API.
+// The source datasets are opened through dVirtualOpenSource, which locates
+// the source file like H5F_prefix_open_file and the source dataset with the
+// group traversal (H5D__open_name).
 //
 // Deviations: the source dataset must have the same datatype size as the
 // virtual dataset (the C library converts between the two datatypes; this
-// reader keeps the elements in their file datatype), and a source dataset
-// in another file must not have variable-length or reference elements
-// (their heap references are only meaningful in the source file).
+// reader keeps the elements in their file datatype, except that atomic
+// numeric elements differing only in byte order are swapped), and a source
+// dataset in another file must not have variable-length or reference
+// elements (their heap references are only meaningful in the source file).
 
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/HDFGroup/hdf5/go/h5"
@@ -119,11 +122,6 @@ type h5dVirtualStorage struct {
 	view      int             /* Method for calculating the extent of the virtual dataset with unlimited selections */
 	printfGap uint64          /* Maximum number of sequential missing source datasets before terminating the search for more */
 	init      bool            /* Whether all information has been completely initialized */
-
-	/* Opens a source dataset (the C library's H5F_prefix_open_file +
-	 * H5D__open_name); nil means f.dVirtualOpenSource. Returning a nil
-	 * dataset (or an ErrNotFound error) means the source does not exist. */
-	openSource func(f *File, fileName, dsetName string) (*File, *h5dShared, error)
 }
 
 // h5dLopsVirtual is H5D_LOPS_VIRTUAL: virtual storage layout I/O ops.
@@ -539,13 +537,11 @@ func (f *File) h5dVirtualOpenSourceDset(vdset *h5dShared, virtualEnt *h5dVirtual
 
 	/* Try opening the source file and the source dataset ("." is the
 	 * virtual dataset's file) */
-	open := vdset.virt.openSource
-	if open == nil {
-		open = func(f *File, fileName, dsetName string) (*File, *h5dShared, error) {
-			return f.dVirtualOpenSource(fileName, dsetName)
-		}
+	vf := vdset.f
+	if vf == nil {
+		vf = f
 	}
-	srcFile, dset, err := open(f, sourceDset.fileName, sourceDset.dsetName)
+	srcFile, dset, err := vf.dVirtualOpenSource(sourceDset.fileName, sourceDset.dsetName)
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return wrapf(err, H5E_DATASET, H5E_CANTOPENFILE, "can't try opening file")
 	}
@@ -569,6 +565,55 @@ func (f *File) h5dVirtualOpenSourceDset(vdset *h5dShared, virtualEnt *h5dVirtual
 		virtualEnt.sourceSpaceStatus = h5oVirtualStatusCorrect
 	}
 	return nil
+}
+
+// dVirtualOpenSource is the part of H5D__virtual_open_source_dset that
+// opens the source file and the source dataset of a mapping; f is the file
+// of the virtual dataset.
+//
+// fileName "." is the virtual dataset's own file. Any other name is located
+// the way H5F_prefix_open_file does with H5F_PREFIX_VDS (an absolute name as
+// is, then the HDF5_VDS_PREFIX environment variable, the virtual prefix of
+// the access properties (WithVirtualPrefix, "${ORIGIN}" expanded), the
+// directory of f, the current directory and the directory of f's resolved
+// name); opened files are kept in f's external file cache and closed with
+// f. dsetName is looked up from the root group of the source file
+// (H5D__open_name).
+//
+// As in the C library (which opens the file with try = true and clears the
+// error stack when H5D__open_name fails), a source file or a source dataset
+// that cannot be opened is not an error: the result is (nil, nil, nil) and
+// the mapping reads as the fill value.
+func (f *File) dVirtualOpenSource(fileName, dsetName string) (srcFile *File, ds *h5dShared, err error) {
+	/* Check if we need to open the source file */
+	if fileName != "." {
+		/* Try opening the file */
+		srcFile, err = f.prefixOpenFile(h5fPrefixVDS, f.h5dBuildFilePrefix(f.opts.vdsPrefix), fileName)
+		if err != nil {
+			/* (try = true: the source file does not exist) */
+			return nil, nil, nil
+		}
+	} else {
+		/* Source file is ".", use the virtual dataset's file */
+		srcFile = f
+	}
+
+	/* Set up the root group in the destination file */
+	srcRootLoc, err := srcFile.gRootLoc()
+	if err != nil {
+		return nil, nil, nil
+	}
+
+	/* Try opening the source dataset */
+	dset, err := openDatasetName(srcRootLoc, dsetName)
+	if err != nil {
+		/* Dataset does not exist (the C code resets the error stack) */
+		return nil, nil, nil
+	}
+	if ds, err = dset.f.dOpen(dset.oh); err != nil {
+		return nil, nil, nil
+	}
+	return dset.f, ds, nil
 }
 
 // h5dVirtualSourceDims returns the current dimensions of the source
@@ -1481,7 +1526,42 @@ func (f *File) h5dVirtualReadOne(dinfo *h5dDsetIoInfo, sourceDset *h5dVirtualSrc
 	if err := srcFile.h5dRead(src, fs, sourceDset.projectedMemSpace, dinfo.buf); err != nil {
 		return wrapf(err, H5E_DATASET, H5E_READERROR, "can't read source dataset")
 	}
+
+	/* (The one datatype conversion done here: atomic source elements that
+	 *  differ from the virtual dataset's only by byte order) */
+	if h5dVirtualByteOrderOnly(src.typ, dinfo.dset.typ) {
+		size := src.typ.Size
+		for s := range sourceDset.projectedMemSpace.iterSeqs(size) {
+			end := s.off + s.len
+			if end < s.off || end > uint64(len(dinfo.buf)) {
+				return errorf(H5E_DATASET, H5E_OVERFLOW, "memory sequence out of range of the destination buffer")
+			}
+			for off := s.off; off+size <= end; off += size {
+				slices.Reverse(dinfo.buf[off : off+size])
+			}
+		}
+	}
 	return nil
+}
+
+// h5dVirtualByteOrderOnly reports whether the elements of src convert to
+// dst by reversing their bytes: both are integer, float or bitfield types
+// of the same size and layout, one little-endian and the other big-endian
+// (the H5T_conv_order path of H5T_convert).
+func h5dVirtualByteOrderOnly(src, dst *h5.Datatype) bool {
+	if src == nil || dst == nil || src.Class != dst.Class || src.Size != dst.Size || src.Size < 2 {
+		return false
+	}
+	switch src.Class {
+	case h5.ClassInteger, h5.ClassFloat, h5.ClassBitfield:
+	default:
+		return false
+	}
+	if !(src.Order == h5.OrderLE && dst.Order == h5.OrderBE) && !(src.Order == h5.OrderBE && dst.Order == h5.OrderLE) {
+		return false
+	}
+	return src.Precision == dst.Precision && src.Offset == dst.Offset && src.Sign == dst.Sign &&
+		src.LSBPad == dst.LSBPad && src.MSBPad == dst.MSBPad && src.Float == dst.Float
 }
 
 // h5dVirtualRead is H5D__virtual_read: read from a virtual dataset.
