@@ -86,6 +86,18 @@ const (
 	H5E_CANTCHECKSUM errMinor = "H5E_CANTCHECKSUM"
 	H5E_BADCHECKSUM  errMinor = "H5E_BADCHECKSUM"
 	H5E_CANTOPERATE  errMinor = "H5E_CANTOPERATE"
+
+	// Added by later modules (object headers, groups, attributes, arrays, dataspaces).
+	H5E_NOSPACE       errMinor = "H5E_NOSPACE"
+	H5E_ALREADYINIT   errMinor = "H5E_ALREADYINIT"
+	H5E_UNINITIALIZED errMinor = "H5E_UNINITIALIZED"
+	H5E_CALLBACK      errMinor = "H5E_CALLBACK"
+	H5E_CANTINSERT    errMinor = "H5E_CANTINSERT"
+	H5E_CANTDELETE    errMinor = "H5E_CANTDELETE"
+	H5E_CANTLIST      errMinor = "H5E_CANTLIST"
+	H5E_CANTSORT      errMinor = "H5E_CANTSORT"
+	H5E_NOTREGISTERED errMinor = "H5E_NOTREGISTERED"
+	H5E_PATH          errMinor = "H5E_PATH"
 )
 
 // Error is the error type returned by this package. It carries the HDF5 error
