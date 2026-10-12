@@ -19,6 +19,7 @@ import (
 	"errors"
 	"math"
 	"math/bits"
+	"slices"
 
 	"github.com/HDFGroup/hdf5/go/h5"
 )
@@ -1150,6 +1151,11 @@ func h5rSelectionPublic(sel *h5sSelection, rank uint32) (h5.Selection, error) {
 			for i, b := range sel.blocks {
 				out.Blocks[i] = [2][]uint64{append([]uint64(nil), b[0]...), append([]uint64(nil), b[1]...)}
 			}
+			break
+		}
+		if slices.Contains(sel.count, h5sUnlimited) || slices.Contains(sel.block, h5sUnlimited) {
+			/* An unlimited selection has no block list
+			 * (H5Sget_select_hyper_blocklist fails) */
 			break
 		}
 		nd := len(sel.start)
