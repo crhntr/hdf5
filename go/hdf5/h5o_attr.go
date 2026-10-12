@@ -244,6 +244,6 @@ func h5oAttrSetCrtIndex(native any, crtIdx uint16) any {
 	a := *attr
 
 	/* Set the creation index */
-	a.crtIdx = crtIdx
+	a.crtIdx = uint32(crtIdx)
 	return &a
 }

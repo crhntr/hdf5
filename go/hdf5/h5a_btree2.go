@@ -119,8 +119,7 @@ func h5aDenseFhNameCmp(obj []byte, udata *h5aFhUdCmp) error {
 		}
 
 		/* Set the creation order index for the attribute */
-		/* (h5oAttr.crtIdx is 16 bits wide; H5O_msg_crt_idx_t is 32) */
-		attr.crtIdx = uint16(udata.record.corder)
+		attr.crtIdx = udata.record.corder
 
 		/* Make callback */
 		if err := udata.foundOp(attr); err != nil {

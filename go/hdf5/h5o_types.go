@@ -327,7 +327,7 @@ type h5oAttr struct {
 	dsShared *h5oShared
 	data     []byte /* raw attribute data in the file datatype */
 	dataSize uint64
-	crtIdx   uint16 /* creation index (dense storage) */
+	crtIdx   uint32 /* creation index (H5O_msg_crt_idx_t) */
 	// sharedInfo for shared attributes
 	shared *h5oShared
 }
