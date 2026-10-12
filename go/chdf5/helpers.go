@@ -40,14 +40,32 @@ int chdf5_link_names(hid_t g, int idx_type, chdf5_names *out) {
     return H5Literate2(g, (H5_index_t)idx_type, H5_ITER_INC, &idx, link_cb, out) < 0 ? -1 : 0;
 }
 
-static herr_t attr_cb(hid_t obj, const char *name, const H5A_info_t *info, void *data) {
-    (void)obj; (void)info;
-    return names_add((chdf5_names *)data, name) < 0 ? -1 : 0;
-}
-
+// The attribute names in name order. H5Aiterate2 is not used: it reopens
+// the object with the default access property list for its callback,
+// which fails for a dataset opened with an external file or virtual prefix
+// ("new external file prefix does not match external file prefix of
+// already open dataset").
 int chdf5_attr_names(hid_t obj, chdf5_names *out) {
-    hsize_t idx = 0;
-    return H5Aiterate2(obj, H5_INDEX_NAME, H5_ITER_INC, &idx, attr_cb, out) < 0 ? -1 : 0;
+    H5O_info2_t info;
+    if (H5Oget_info3(obj, &info, H5O_INFO_NUM_ATTRS) < 0)
+        return -1;
+    for (hsize_t i = 0; i < info.num_attrs; i++) {
+        ssize_t n = H5Aget_name_by_idx(obj, ".", H5_INDEX_NAME, H5_ITER_INC, i, NULL, 0, H5P_DEFAULT);
+        if (n < 0)
+            return -1;
+        char *name = malloc((size_t)n + 1);
+        if (!name)
+            return -1;
+        if (H5Aget_name_by_idx(obj, ".", H5_INDEX_NAME, H5_ITER_INC, i, name, (size_t)n + 1, H5P_DEFAULT) < 0) {
+            free(name);
+            return -1;
+        }
+        int rc = names_add(out, name);
+        free(name);
+        if (rc < 0)
+            return -1;
+    }
+    return 0;
 }
 
 typedef struct {

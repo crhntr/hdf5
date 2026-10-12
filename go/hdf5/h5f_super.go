@@ -169,6 +169,43 @@ func (f *File) superRead() error {
 		}
 	}
 
+	/*
+	 * Make sure that the data is not truncated. One case where this is
+	 * possible is if the first file of a family of files was opened
+	 * individually.
+	 *
+	 * The EOF check is skipped when the private property
+	 * H5F_ACS_SKIP_EOF_CHECK_NAME exists in the fapl (here: skipEOFCheck).
+	 *
+	 * (The C library checks before decoding the driver information block;
+	 *  here the check comes after it because sbLoad switches a family or
+	 *  multi member opened by name to the driver of the whole set, whose
+	 *  EOF is the one to check.)
+	 */
+	if !f.skipEOFCheck {
+		/* H5FD_get_eof: relative to the base address */
+		eof := uint64(0)
+		if e := f.fd.EOF(); e > f.baseAddr {
+			eof = e - f.baseAddr
+		}
+		/* (Account for the stored EOA being absolute offset -QAK) */
+		if eof+sblock.baseAddr < sblock.storedEOF {
+			return errorf(H5E_FILE, H5E_TRUNCATED, "truncated file: eof = %d, sblock->base_addr = %d, stored_eof = %d",
+				eof, sblock.baseAddr, sblock.storedEOF)
+		}
+	}
+
+	/*
+	 * Tell the file driver how much address space has already been
+	 * allocated so that it knows how to allocate additional memory.
+	 */
+	/* (H5F__set_eoa: reads beyond the EOA fail, see File.checkEOA; the
+	 *  multi driver keeps the end of address of each member) */
+	f.eoa = sblock.storedEOF
+	if _, ok := f.fd.(*multiDriver); ok {
+		f.eoa = haddrUndef
+	}
+
 	/* Check for the superblock extension and decode the messages that
 	 * matter for reading: driver info, B-tree 'K' values and the shared
 	 * message table.

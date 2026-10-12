@@ -77,8 +77,21 @@ not hold the key (the C `*found = false`).
 
 ## Verification
 
-`conformance` opens every HDF5 file in the repository with both packages and
-compares: superblock info, the full link tree, object info, attribute names /
-datatypes / dataspaces / values, dataset datatypes / dataspaces / layouts /
-filters / values (as `h5.Value` trees). Files the C library itself cannot read
-(deliberately corrupt test inputs) must fail in both.
+`conformance` opens every HDF5 file in the repository with both packages
+and compares: superblock info, the full link tree, object info, comments,
+attribute names / datatypes / dataspaces / values, dataset datatypes /
+dataspaces / layouts / filters / fill values / values (as `h5.Value`
+trees, floats compared by bit pattern) and hyperslabs. libhdf5 is the
+reference: files, objects and data the C library refuses (deliberately
+corrupt test inputs, missing filters or external files) must fail in both,
+and a file the C library opens must open. The only differences allowed are
+the fields API.md lists as ignored and the entries of the allow-list in
+`conformance/allow_test.go`, each with its justification. `TestFixtures`
+compares files generated with `chdf5`'s writing API to cover the
+combinations the corpus lacks. Run it with
+
+    make conformance
+
+(or `PKG_CONFIG_PATH=... go test -v ./conformance`); `make test` runs it
+non-verbosely. A mismatch in the pure Go reader is fixed by translating the
+C code path that libhdf5 takes, not by special-casing the file.

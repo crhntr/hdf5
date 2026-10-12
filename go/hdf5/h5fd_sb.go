@@ -77,7 +77,7 @@ func openMemberDriver(name string, o *openOptions) (fileDriver, error) {
 	if err != nil {
 		return nil, nil
 	}
-	probe := &File{name: name, fd: sec2, opts: *o}
+	probe := &File{name: name, fd: sec2, opts: *o, skipEOFCheck: true}
 	if err := probe.superRead(); err != nil {
 		sec2.Close()
 		return nil, nil

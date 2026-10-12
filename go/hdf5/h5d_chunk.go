@@ -1159,6 +1159,12 @@ func h5dCopsEarray() *h5dChunkOps {
 	return &h5dChunkOps{
 		idxType:      h5dChunkIdxEarray,
 		isSpaceAlloc: h5dChunkIdxIsSpaceAlloc,
+		/* H5D__earray_idx_init, at dataset open: the dataspace must have
+		 * exactly one unlimited dimension (the index layout is set up again
+		 * on first use) */
+		init: func(_ *File, dset *h5dShared) error {
+			return h5dEarrayIdxInit(&h5dChunkIdxLayout{}, dset.maxDims)
+		},
 		getAddr: func(f *File, dset *h5dShared, udata *h5dChunkUd) error {
 			sc := &dset.chunkSt
 			if sc.ea == nil {

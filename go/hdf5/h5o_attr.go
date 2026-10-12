@@ -141,7 +141,7 @@ func (f *File) h5oAttrDecode(openOh *h5o, p *image) (*h5oAttr, error) {
 			dtFlags = h5oMsgFlagShared
 		}
 		v, err := f.h5oSharedDecodeTmpl(openOh, dtFlags, q, h5oDtypeID,
-			func(f *File, _ *h5o, _ uint8, p *image) (any, error) { return h5oDtypeDecode(f, p) })
+			func(f *File, oh *h5o, _ uint8, p *image) (any, error) { return h5oDtypeDecodeOh(f, oh, p) })
 		if err != nil {
 			return nil, wrapf(err, H5E_ATTR, H5E_CANTDECODE, "can't decode attribute datatype")
 		}

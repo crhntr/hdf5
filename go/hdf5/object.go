@@ -41,7 +41,7 @@ type Dataset struct {
 	addr haddr  // address of the object header
 	path string // path the dataset was opened by ("" when opened by address)
 
-	// The in-core dataset (H5D_shared_t), opened on first use.
+	// The in-core dataset (H5D_shared_t), opened by newDataset.
 	open    sync.Once
 	shared  *h5dShared
 	openErr error
@@ -235,11 +235,22 @@ func openObjectAt(loc *gLoc) (Object, error) {
 	case h5.ObjectGroup:
 		return &Group{f: loc.f, oh: oh, addr: loc.addr, path: loc.path}, nil
 	case h5.ObjectDataset:
-		return &Dataset{f: loc.f, oh: oh, addr: loc.addr, path: loc.path}, nil
+		return newDataset(loc.f, oh, loc.addr, loc.path)
 	case h5.ObjectNamedDatatype:
 		return newDatatype(loc, oh)
 	}
 	return nil, errorf(H5E_OHDR, H5E_BADTYPE, "unknown object type")
+}
+
+// newDataset opens the dataset whose header is oh (H5D_open): like
+// H5D__open_oid, the datatype, dataspace, fill value, layout and filter
+// messages are decoded now, so a dataset libhdf5 cannot open fails here.
+func newDataset(f *File, oh *h5o, addr haddr, path string) (*Dataset, error) {
+	d := &Dataset{f: f, oh: oh, addr: addr, path: path}
+	if _, err := d.dataset(); err != nil {
+		return nil, wrapf(err, H5E_DATASET, H5E_CANTOPENOBJ, "unable to open dataset")
+	}
+	return d, nil
 }
 
 // newDatatype opens the committed datatype whose header is oh
@@ -298,7 +309,7 @@ func openDatasetName(loc *gLoc, name string) (*Dataset, error) {
 	if err != nil {
 		return nil, wrapf(err, H5E_DATASET, H5E_CANTOPENOBJ, "can't open dataset")
 	}
-	return &Dataset{f: dsetLoc.f, oh: oh, addr: dsetLoc.addr, path: dsetLoc.path}, nil
+	return newDataset(dsetLoc.f, oh, dsetLoc.addr, dsetLoc.path)
 }
 
 // openDatatypeName is H5T__open_name: open the committed datatype name

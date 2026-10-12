@@ -107,12 +107,9 @@ func init() {
 
 // ohdrKnownFailures lists corpus files that h5dump reads but this package
 // cannot, with the reason.
-var ohdrKnownFailures = map[string]string{
-	// The root group's object header is only in the metadata cache image
-	// (the superblock extension's H5O_MDCI_MSG_ID message), which is not
-	// translated.
-	"tools/test/misc/testfiles/h5clear_mdc_image.h5": "metadata cache image",
-}
+// (None: h5clear_mdc_image.h5, whose root group object header is only in
+// the metadata cache image, is read through h5c_image.go.)
+var ohdrKnownFailures = map[string]string{}
 
 // ohdrWalkResult is what walkObjectHeaders found in one file.
 type ohdrWalkResult struct {

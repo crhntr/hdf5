@@ -330,7 +330,8 @@ func (f *File) Superblock() h5.SuperblockInfo {
 	defer mu.Unlock()
 	var sb h5.SuperblockInfo
 	var info C.H5F_info2_t
-	if C.H5Fget_info2(f.id, &info) >= 0 {
+	haveInfo := C.H5Fget_info2(f.id, &info) >= 0
+	if haveInfo {
 		sb.Version = uint8(info.super.version)
 	}
 	if fcpl := C.H5Fget_create_plist(f.id); fcpl >= 0 {
@@ -360,6 +361,11 @@ func (f *File) Superblock() h5.SuperblockInfo {
 		sb.EndOfFileAddress = raw.eof
 		sb.StatusFlags = raw.flags
 		sb.DriverName = raw.driverName
+		if !haveInfo {
+			// H5Fget_info2 also sizes the superblock extension and free
+			// space; it fails when those cannot be read.
+			sb.Version = raw.version
+		}
 	}
 	return sb
 }
@@ -378,6 +384,7 @@ func (f *File) superblockFile() string {
 }
 
 type rawSuper struct {
+	version             uint8
 	base, ext, drv, eof uint64
 	flags               uint8
 	driverName          string
@@ -432,6 +439,7 @@ func readRawSuperblock(name string, sizeofAddr int) (*rawSuper, error) {
 	}
 	r := &rawSuper{base: uint64(at)}
 	vers := hdr[8]
+	r.version = vers
 	var p []byte
 	if vers < 2 {
 		if sizeofAddr == 0 {

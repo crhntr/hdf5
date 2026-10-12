@@ -3,7 +3,7 @@
 HDF5_DIR ?= $(HOME)/.local/hdf5-1.14.6
 export PKG_CONFIG_PATH := $(HDF5_DIR)/lib/pkgconfig:$(PKG_CONFIG_PATH)
 
-.PHONY: all test test-pure test-cgo vet fmt
+.PHONY: all test test-pure test-cgo conformance vet fmt
 
 all: vet test
 
@@ -14,6 +14,11 @@ test-pure:
 
 test-cgo:
 	go test ./chdf5 $(if $(wildcard conformance),./conformance)
+
+# Compare hdf5 with libhdf5 (through chdf5) over the repository corpus and
+# generated fixtures; prints the per-file summaries and the final tables.
+conformance:
+	go test -count=1 -v -run 'TestCorpus|TestExternalFilesCurrentDirectory|TestFixtures' ./conformance
 
 vet:
 	go vet ./...

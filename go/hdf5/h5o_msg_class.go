@@ -53,7 +53,7 @@ func h5oMsgClassG(id uint16) (*h5oMsgClass, bool) {
 			decode: func(f *File, _ *h5o, _ uint8, p *image) (any, error) { return h5oLinfoDecode(f, p) }}, true
 	case h5oDtypeID: /*0x0003 Datatype                            */
 		return &h5oMsgClass{id: id, name: "datatype", shareFlags: sharable,
-			decode: shared(id, func(f *File, _ *h5o, _ uint8, p *image) (any, error) { return h5oDtypeDecode(f, p) })}, true
+			decode: shared(id, func(f *File, oh *h5o, _ uint8, p *image) (any, error) { return h5oDtypeDecodeOh(f, oh, p) })}, true
 	case h5oFillID: /*0x0004 Old data storage -- fill value      */
 		return &h5oMsgClass{id: id, name: "fill", shareFlags: sharable,
 			decode: shared(id, func(f *File, oh *h5o, _ uint8, p *image) (any, error) { return f.h5oFillOldDecode(oh, p) })}, true

@@ -31,12 +31,13 @@ import (
 //
 // mu must be held.
 func describeType(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, error) {
-	dt, _, err := describe(tid, sizeofAddr)
+	dt, _, err := describe(tid, sizeofAddr, false)
 	return dt, err
 }
 
 // describe returns the description and the in-memory size of tid.
-func describe(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, uint64, error) {
+// inVlen is set for the base type of a variable-length sequence.
+func describe(tid C.hid_t, sizeofAddr uint64, inVlen bool) (*h5.Datatype, uint64, error) {
 	cls := C.H5Tget_class(tid)
 	if cls < 0 {
 		return nil, 0, h5err("H5Tget_class")
@@ -92,7 +93,7 @@ func describe(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, uint64, error) {
 			dt.Class = h5.ClassVlen
 			dt.VlenKind = h5.VlenString
 			dt.Size = vlenDiskSize(sizeofAddr)
-			base, err := superOf(tid, sizeofAddr)
+			base, err := superOf(tid, sizeofAddr, false)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -110,10 +111,15 @@ func describe(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, uint64, error) {
 	case C.H5T_REFERENCE:
 		dt.Class = h5.ClassReference
 		dt.RefType = h5.RefType(flags & 0x0f)
-		switch dt.RefType {
-		case h5.RefObject1:
+		switch {
+		case inVlen:
+			// H5T_set_loc does not recurse from a sequence into its
+			// reference base type: the size is the one decoded from the
+			// datatype message, which is what H5T__conv_vlen uses for
+			// the elements of a sequence.
+		case dt.RefType == h5.RefObject1:
 			dt.Size = sizeofAddr
-		case h5.RefRegion1:
+		case dt.RefType == h5.RefRegion1:
 			dt.Size = sizeofAddr + 4
 		default:
 			// H5T__ref_set_loc: MAX(4 + H5R_ENCODE_HEADER_SIZE + blob id
@@ -123,7 +129,7 @@ func describe(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, uint64, error) {
 		dt.Precision = uint32(8 * dt.Size)
 	case C.H5T_ENUM:
 		dt.Class = h5.ClassEnum
-		base, err := superOf(tid, sizeofAddr)
+		base, err := superOf(tid, sizeofAddr, false)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -151,7 +157,7 @@ func describe(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, uint64, error) {
 		dt.Class = h5.ClassVlen
 		dt.VlenKind = h5.VlenSequence
 		dt.Size = vlenDiskSize(sizeofAddr)
-		base, err := superOf(tid, sizeofAddr)
+		base, err := superOf(tid, sizeofAddr, true)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -170,7 +176,7 @@ func describe(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, uint64, error) {
 		for i := range nd {
 			dt.ArrayDims[i] = uint64(dims[i])
 		}
-		base, err := superOf(tid, sizeofAddr)
+		base, err := superOf(tid, sizeofAddr, false)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -199,7 +205,7 @@ func describe(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, uint64, error) {
 			if mt < 0 {
 				return nil, 0, h5err("H5Tget_member_type")
 			}
-			mdt, msize, err := describe(mt, sizeofAddr)
+			mdt, msize, err := describe(mt, sizeofAddr, false)
 			C.H5Tclose(mt)
 			if err != nil {
 				return nil, 0, err
@@ -237,13 +243,13 @@ func atomic(tid C.hid_t, dt *h5.Datatype) error {
 }
 
 // superOf describes the base type of an enum, vlen or array.
-func superOf(tid C.hid_t, sizeofAddr uint64) (*h5.Datatype, error) {
+func superOf(tid C.hid_t, sizeofAddr uint64, inVlen bool) (*h5.Datatype, error) {
 	st := C.H5Tget_super(tid)
 	if st < 0 {
 		return nil, h5err("H5Tget_super")
 	}
 	defer C.H5Tclose(st)
-	dt, _, err := describe(st, sizeofAddr)
+	dt, _, err := describe(st, sizeofAddr, inVlen)
 	return dt, err
 }
 

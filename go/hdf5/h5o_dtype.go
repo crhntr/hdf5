@@ -76,12 +76,12 @@ func h5oDtypeCheckVersion(dt *h5.Datatype, vers *uint8, minVers uint8, ioflags *
 }
 
 // h5tUpgradeVersion is H5T__upgrade_version: upgrade the version of dt and
-// all its component datatypes to at least version.
+// recursively of its compound members and parent datatypes (H5T__visit
+// with H5T_VISIT_SIMPLE | H5T_VISIT_COMPLEX_LAST: the components first).
 func h5tUpgradeVersion(dt *h5.Datatype, version uint8) {
 	if dt == nil {
 		return
 	}
-	/* H5T__upgrade_version_cb, visited depth first */
 	switch dt.Class {
 	case h5.ClassCompound:
 		for i := range dt.Members {
@@ -90,8 +90,22 @@ func h5tUpgradeVersion(dt *h5.Datatype, version uint8) {
 	case h5.ClassArray, h5.ClassEnum, h5.ClassVlen:
 		h5tUpgradeVersion(dt.Base, version)
 	}
-	if dt.Version < version {
-		dt.Version = version
+	h5tUpgradeVersionCb(dt, version)
+}
+
+// h5tUpgradeVersionCb is H5T__upgrade_version_cb.
+func h5tUpgradeVersionCb(dt *h5.Datatype, version uint8) {
+	/* Special behavior for each type of datatype */
+	switch dt.Class {
+	case h5.ClassCompound, h5.ClassArray, h5.ClassEnum:
+		/* These types benefit from "upgrading" their version */
+		if version > dt.Version {
+			dt.Version = version
+		}
+	case h5.ClassVlen:
+		if dt.Base != nil && dt.Base.Version > dt.Version {
+			dt.Version = dt.Base.Version
+		}
 	}
 }
 
@@ -831,6 +845,26 @@ func h5oDtypeDecodeIO(f *File, p *image, ioflags uint) (*h5.Datatype, error) {
 		return nil, wrapf(err, H5E_DATATYPE, H5E_CANTDECODE, "can't decode type")
 	}
 	return dt, nil
+}
+
+// h5oDtypeDecodeOh is H5O__dtype_decode for a message of the object header
+// openOh: the "unusual number of unused bits" check applies unless the
+// object header has a checksum (H5F_RFIC_UNUSUAL_NUM_UNUSED_NUMERIC_BITS is
+// never set here). A nil openOh is a decode from a non-object header,
+// assumed checksummed.
+func h5oDtypeDecodeOh(f *File, openOh *h5o, p *image) (*h5.Datatype, error) {
+	/* Indicate if the object header has a checksum, or if the
+	 * H5F_RFIC_UNUSUAL_NUM_UNUSED_NUMERIC_BITS flag is set */
+	var ioflags uint
+	if openOh != nil {
+		if h5oSizeofChksumOh(openOh) > 0 {
+			ioflags |= h5oDecodeioRficUnubnt
+		}
+	} else {
+		/* Decode operations from non-object headers are assumed to be checksummed */
+		ioflags |= h5oDecodeioRficUnubnt
+	}
+	return h5oDtypeDecodeIO(f, p, ioflags)
 }
 
 // h5oDtypeDecode is H5O_dtype_decode: decode a datatype message. As with

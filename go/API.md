@@ -75,7 +75,10 @@ func (t *Datatype) Datatype() *h5.Datatype
 `ReadValues` returns one value per element, one value for a scalar
 dataspace and an empty (non-nil) slice for a null dataspace or an empty
 selection. All the methods of `hdf5.Dataset` are safe for concurrent use
-(the dataset is opened on first use and reads are serialized per dataset).
+(reads are serialized per dataset). As with H5Dopen, opening a dataset
+(`Open`, `OpenDataset`, `Walk`) decodes its datatype, dataspace, layout,
+fill value and filter messages, so a dataset libhdf5 cannot open fails
+there.
 
 ## Supported Go types for `Read[T]` / `ReadInto`
 
@@ -124,6 +127,13 @@ Visit with that error and continues with the next link.
 `WithDriver("family"|"multi"|"split")` and `WithFamilyMemberSize(size)`.
 `hdf5` detects family and multi/split files from the superblock's driver
 information instead.
+
+Relative external data file (EFL) names are looked up in the current
+directory only, unless a prefix is given (`WithExternalFilePrefix`,
+`HDF5_EXTFILE_PREFIX`; `${ORIGIN}` at its start is the directory of the
+HDF5 file), in both packages. Note that libhdf5 reads `HDF5_EXTFILE_PREFIX`
+and `HDF5_VDS_PREFIX` once, when the library is initialized, and `hdf5`
+when a file is opened.
 
 Virtual dataset source files are located as H5F_prefix_open_file does: an
 absolute name as is, then `HDF5_VDS_PREFIX`, the `WithVirtualPrefix` prefix
@@ -214,7 +224,8 @@ them):
 | `Path()` of an object reached through an external link | the path in the target file (the traversal's location) | the path as given by the caller |
 | `Path()` of an object from `OpenAddress` | `""`                                  | H5Iget_name (a path, or `""`)          |
 | `Filter.Name` of an unnamed szip filter | `szip`                                | `Unknown library filter` when libhdf5 is built without szip |
-| external data files (EFL) with a relative name and no prefix | the current directory, then the directory of the file | the current directory only |
+| `Link.UserData` of a user-defined link whose class is not registered | the raw link value | nil (H5Lget_val returns no data) |
+| family / multi / split files opened by a member name | detected from the superblock | need `WithDriver` |
 | reading szip-compressed data          | `ErrUnsupported`                        | works when libhdf5 has szip            |
 | VDS sources whose datatype differs from the virtual dataset's other than by byte order | different size: `ErrUnsupported`; same size: elements copied unconverted | converted by H5T_convert |
 | VDS sources in another file with variable-length or reference elements | `ErrUnsupported` | read                       |

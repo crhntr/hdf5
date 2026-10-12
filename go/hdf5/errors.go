@@ -37,6 +37,7 @@ const (
 	H5E_INTERNAL  errMajor = "H5E_INTERNAL"
 	H5E_RESOURCE  errMajor = "H5E_RESOURCE"
 	H5E_VFL       errMajor = "H5E_VFL"
+	H5E_CACHE     errMajor = "H5E_CACHE"
 )
 
 const (
@@ -102,6 +103,9 @@ const (
 	H5E_PATH          errMinor = "H5E_PATH"
 	H5E_CANTFIND      errMinor = "H5E_CANTFIND"
 	H5E_BADSELECT     errMinor = "H5E_BADSELECT"
+
+	// Added by the conformance fixes (file open checks).
+	H5E_TRUNCATED errMinor = "H5E_TRUNCATED"
 )
 
 // Error is the error type returned by this package. It carries the HDF5 error

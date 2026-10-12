@@ -52,7 +52,8 @@ func i32Range(from, n int) []any {
 }
 
 func TestDatasetGenerated(t *testing.T) {
-	f, err := Open("testdata/dset.h5")
+	// The external data file dset_ext.raw is next to dset.h5.
+	f, err := Open("testdata/dset.h5", WithExternalFilePrefix("${ORIGIN}"))
 	require.NoError(t, err)
 	defer f.Close()
 

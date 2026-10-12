@@ -69,3 +69,31 @@ or `make test` from this directory (see the Makefile for the HDF5_DIR
 variable). With `CGO_ENABLED=0` the cgo packages are excluded. Some tests
 of `hdf5` also compare raw data with the output of the reference `h5dump`
 when it is installed in `~/.local/hdf5-1.14.6/bin`.
+
+### Conformance suite
+
+`conformance` (test-only, cgo) proves that `hdf5` reads what libhdf5
+reads, identically. For every `.h5`/`.hdf5` file of the repository
+(plus `hdf5/testdata`) it opens the file with both packages and compares
+the superblock, the whole link tree (`Walk`: paths and links), and for
+every object its info, comment, links (by name and by creation order),
+attributes (names, datatypes, dataspaces, values, `ReadAttribute[T]`),
+committed datatypes and, for datasets, the datatype, dataspace, layout,
+filters, fill value, the values (datasets up to 64 MiB), a strided
+hyperslab, an out-of-bounds hyperslab and `Read[T]`; soft and external
+link targets and object references (`OpenAddress`) are followed too.
+Values are compared element by element, floats by bit pattern. Whatever
+libhdf5 refuses (corrupt files, missing filters or external files) `hdf5`
+must refuse as well. `TestFixtures` does the same for files written with
+the `chdf5` writing API in every file format variant (latest format with
+dense groups and attributes and the version 2 chunk indexes, shared
+messages, paged file space, user blocks, 4-byte addresses, external links
+between the generated files, ...). The few known, justified differences
+are on the allow-list in `conformance/allow_test.go` (see also API.md).
+
+    make conformance
+
+runs it verbosely: each file logs a summary line, and each test ends with
+a table of what was compared, what both packages refuse (by reason) and
+which allowed differences were met. The whole suite takes about ten
+seconds.

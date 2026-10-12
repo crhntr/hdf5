@@ -123,11 +123,19 @@ func (f *File) superExtRead() error {
 	/* Check for the extension having a 'metadata cache image' message */
 	if f.msgExists(extLoc, h5oMdciMsgID) {
 		/* Retrieve the 'metadata cache image message' structure */
-		if _, err := f.msgRead(extLoc, h5oMdciMsgID); err != nil {
+		v, err := f.msgRead(extLoc, h5oMdciMsgID)
+		if err != nil {
 			return wrapf(err, H5E_FILE, H5E_CANTGET, "unable to get metadata cache image message")
 		}
-		/* (H5AC_load_cache_image_on_next_protect: loading the metadata
-		 * cache image into the cache is not translated.) */
+		mdci := v.(*h5oMdci)
+
+		/* Indicate to the cache that there's an image to load on first protect call */
+		/* (H5AC_load_cache_image_on_next_protect: the next protect is the
+		 *  first one after the superblock is read, the image is loaded
+		 *  now; see h5c_image.go) */
+		if err := f.h5cLoadCacheImage(mdci.addr, mdci.size); err != nil {
+			return wrapf(err, H5E_CACHE, H5E_CANTLOAD, "Can't load cache image")
+		}
 	}
 	return nil
 }

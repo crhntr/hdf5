@@ -81,6 +81,22 @@ type File struct {
 	// resolved path. Closed with the file.
 	extFiles map[string]*File
 
+	// skipEOFCheck is the H5F_ACS_SKIP_EOF_CHECK_NAME file access property:
+	// do not check the stored EOF address against the size of the file
+	// (set when probing a family member).
+	skipEOFCheck bool
+
+	// eoa is the absolute end-of-address marker (H5FD_get_eoa): the stored
+	// EOF address of the superblock. Like H5FD_read, reads beyond it fail.
+	// 0 or haddrUndef (no limit) before the superblock is read and for the
+	// multi driver, whose members have their own address ranges.
+	eoa haddr
+
+	// cacheImage holds the entries of the metadata cache image (sorted by
+	// address), which take precedence over the bytes at their addresses
+	// (h5c_image.go).
+	cacheImage []h5cPrefetched
+
 	closed bool
 }
 
@@ -213,7 +229,25 @@ func openWithDriver(name string, fd fileDriver, o openOptions) (*File, error) {
 	if err := f.superRead(); err != nil {
 		return nil, err
 	}
+	if err := f.checkStatusFlags(); err != nil {
+		return nil, err
+	}
 	return f, nil
+}
+
+// checkStatusFlags is the H5F_ACC_RDONLY branch of the status_flags
+// consistency check of H5F_open (src/H5Fint.c), done for every driver with
+// a lock method (all the drivers of this package): a file with a version 3
+// superblock that is marked open for writing is refused.
+func (f *File) checkStatusFlags() error {
+	/* Skip check of status_flags for file with < superblock version 3 */
+	if f.sblock.superVers >= hdf5SuperblockVersion3 {
+		if f.sblock.statusFlags&h5fSuperWriteAccess != 0 || f.sblock.statusFlags&h5fSuperSWMRWriteAccess != 0 {
+			return errorf(H5E_FILE, H5E_CANTOPENFILE,
+				"file is already open for write (may use <h5clear file> to clear file consistency flags)")
+		}
+	}
+	return nil
 }
 
 // Name returns the path the file was opened with.
@@ -256,14 +290,31 @@ func (f *File) readAt(addr haddr, n int) ([]byte, error) {
 	if abs < addr || abs+uint64(n) < abs {
 		return nil, errorf(H5E_IO, H5E_OVERFLOW, "address overflow")
 	}
-	if eof := f.fd.EOF(); abs+uint64(n) > eof {
-		return nil, errorf(H5E_IO, H5E_OVERFLOW, "addr overflow, addr = %d, size = %d, eoa = %d", addr, n, eof)
+	if img := f.cacheImageEntry(addr, uint64(n)); img != nil {
+		return append([]byte(nil), img...), nil
+	}
+	if err := f.checkEOA(addr, abs, uint64(n)); err != nil {
+		return nil, err
 	}
 	buf := make([]byte, n)
 	if _, err := f.fd.ReadAt(buf, int64(abs)); err != nil && err != io.EOF {
 		return nil, wrapf(err, H5E_IO, H5E_READERROR, "file read failed")
 	}
+	f.overlayCacheImage(addr, buf)
 	return buf, nil
+}
+
+// checkEOA checks a read of size bytes at addr (abs: absolute offset)
+// against the end-of-address marker, as H5FD_read does, and against the
+// end of the file.
+func (f *File) checkEOA(addr, abs, size uint64) error {
+	if f.eoa != 0 && addrDefined(f.eoa) && abs+size > f.eoa {
+		return errorf(H5E_ARGS, H5E_OVERFLOW, "addr overflow, addr = %d, size = %d, eoa = %d", addr, size, f.eoa)
+	}
+	if eof := f.fd.EOF(); abs+size > eof {
+		return errorf(H5E_IO, H5E_OVERFLOW, "addr overflow, addr = %d, size = %d, eof = %d", addr, size, eof)
+	}
+	return nil
 }
 
 // readInto is readAt into a caller-provided buffer (used for raw data).
@@ -275,12 +326,17 @@ func (f *File) readInto(addr haddr, buf []byte) error {
 	if abs < addr || abs+uint64(len(buf)) < abs {
 		return errorf(H5E_IO, H5E_OVERFLOW, "address overflow")
 	}
-	if eof := f.fd.EOF(); abs+uint64(len(buf)) > eof {
-		return errorf(H5E_IO, H5E_OVERFLOW, "addr overflow, addr = %d, size = %d, eoa = %d", addr, len(buf), eof)
+	if img := f.cacheImageEntry(addr, uint64(len(buf))); img != nil {
+		copy(buf, img)
+		return nil
+	}
+	if err := f.checkEOA(addr, abs, uint64(len(buf))); err != nil {
+		return err
 	}
 	if _, err := f.fd.ReadAt(buf, int64(abs)); err != nil && err != io.EOF {
 		return wrapf(err, H5E_IO, H5E_READERROR, "file read failed")
 	}
+	f.overlayCacheImage(addr, buf)
 	return nil
 }
 
@@ -293,9 +349,15 @@ func (f *File) readImage(addr haddr, n int) (*image, error) {
 	return f.newImage(buf), nil
 }
 
-// eof is H5F_get_eof relative to the base address.
+// eof is the end of the readable address space relative to the base
+// address: H5F_get_eoa (the end-of-address marker, which bounds the
+// metadata cache's speculative reads in H5C__verify_len_eoa), limited by
+// H5F_get_eof (the size of the file).
 func (f *File) eof() uint64 {
 	e := f.fd.EOF()
+	if f.eoa != 0 && addrDefined(f.eoa) && f.eoa < e {
+		e = f.eoa
+	}
 	if e < f.baseAddr {
 		return 0
 	}

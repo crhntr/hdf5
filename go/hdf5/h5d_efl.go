@@ -6,9 +6,7 @@ package hdf5
 // segments {offset, size} of the external files, in list order.
 
 import (
-	"errors"
 	"io"
-	"io/fs"
 	"os"
 )
 
@@ -77,15 +75,11 @@ func h5dEflInit(_ *File, dset *h5dShared) error {
 func h5dEflIsSpaceAlloc(*h5dShared) bool { return true }
 
 // h5dEflOpenFile opens the external file name: H5_combine_path with the
-// dataset's external file prefix, then HDopen. Without a prefix, a relative
-// name that does not exist relative to the current directory is also
-// looked up in the directory of the HDF5 file.
+// dataset's external file prefix, then HDopen. As in libhdf5, without a
+// prefix a relative name is relative to the current directory only.
 func h5dEflOpenFile(dset *h5dShared, name string) (*os.File, error) {
 	fullName := h5dCombinePath(dset.extfilePrefix, name)
 	fh, err := os.Open(fullName)
-	if err != nil && dset.extfilePrefix == "" && errors.Is(err, fs.ErrNotExist) && dset.f.dir != "" {
-		fh, err = os.Open(h5dCombinePath(dset.f.dir, name))
-	}
 	if err != nil {
 		return nil, wrapf(err, H5E_EFL, H5E_CANTOPENFILE, "unable to open external raw data file")
 	}

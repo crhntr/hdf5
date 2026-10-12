@@ -214,7 +214,8 @@ func TestDtypeDecodeCompoundV1(t *testing.T) {
 	assert.Equal(t, "a", dt.Members[0].Name)
 	assert.Equal(t, uint64(0), dt.Members[0].Offset)
 	assert.Equal(t, h5.ClassInteger, dt.Members[0].Type.Class)
-	assert.Equal(t, uint8(2), dt.Members[0].Type.Version, "upgraded with the compound")
+	// H5T__upgrade_version_cb only upgrades compound, array and enum types.
+	assert.Equal(t, uint8(1), dt.Members[0].Type.Version, "atomic members keep their version")
 	m := dt.Members[1]
 	assert.Equal(t, "arr_member", m.Name)
 	assert.Equal(t, uint64(4), m.Offset)
@@ -349,7 +350,7 @@ func TestDtypeDecodeArray(t *testing.T) {
 	msg = newEnc().hdr(h5.ClassArray, 1, 0, 4).u8(1, 0, 0, 0).u32(1).u32(0).raw(encInt(1, 4, true, false, 0, 32)).b
 	dt = decodeDtype(t, msg)
 	assert.Equal(t, uint8(2), dt.Version)
-	assert.Equal(t, uint8(2), dt.Base.Version)
+	assert.Equal(t, uint8(1), dt.Base.Version, "atomic base types keep their version")
 
 	decodeDtypeErr(t, newEnc().hdr(h5.ClassArray, 3, 0, 4).u8(33).b) // too many dimensions
 }
