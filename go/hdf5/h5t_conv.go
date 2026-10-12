@@ -884,11 +884,32 @@ func (f *File) h5tRefDsetregDiskRead(elem []byte) (any, error) {
 		}
 		return nil, wrapf(err, H5E_REFERENCE, H5E_CANTDECODE, "can't deserialize selection")
 	}
-	ref.Selection, err = h5rSelectionPublic(sel, 0)
+	/* (The selection is deserialized into a copy of the dataset's
+	 *  dataspace (H5S_read): its rank is the dataset's) */
+	ref.Selection, err = h5rSelectionPublic(sel, f.h5rDatasetRank(addr, sel))
 	if err != nil {
 		return nil, err
 	}
 	return ref, nil
+}
+
+// h5rDatasetRank returns the rank of the dataspace of the dataset whose
+// object header is at addr, or the rank sel was serialized with when the
+// dataspace cannot be read.
+func (f *File) h5rDatasetRank(addr haddr, sel *h5sSelection) uint32 {
+	if addrDefined(addr) {
+		if oh, err := f.oProtect(addr); err == nil {
+			if v, err := f.msgRead(oh, h5oSdspaceID); err == nil {
+				if ext, ok := v.(*h5sExtent); ok && ext != nil {
+					return ext.rank
+				}
+			}
+		}
+	}
+	if sel != nil {
+		return sel.rank
+	}
+	return 0
 }
 
 // h5rDecodeHeap is H5R__decode_heap: read the data a reference stores in
@@ -1125,6 +1146,13 @@ const h5rMaxSelectionBlocks = 1 << 24
 // h5rSelectionPublic converts a decoded selection to the shared vocabulary
 // (h5.Selection). Regular hyperslabs are expanded into their blocks in
 // row-major order. rank is the extent rank when known (0 otherwise).
+//
+// The result is what package chdf5 builds from the H5Sget_select_* queries:
+// Points and Blocks are nil when the selection has no points or blocks, and
+// a hyperslab with an unlimited count or block (which has no block list,
+// H5Sget_select_hyper_nblocks fails) is described by Unlimited, the regular
+// hyperslab of H5Sget_regular_hyperslab (the "application" diminfo, with
+// h5.Unlimited entries and Stride and Block always set).
 func h5rSelectionPublic(sel *h5sSelection, rank uint32) (h5.Selection, error) {
 	if sel == nil {
 		return h5.Selection{Type: h5.SelAll, Rank: int(rank)}, nil
@@ -1140,6 +1168,9 @@ func h5rSelectionPublic(sel *h5sSelection, rank uint32) (h5.Selection, error) {
 		out.Type = h5.SelAll
 	case h5sSelPoints:
 		out.Type = h5.SelPoints
+		if len(sel.points) == 0 {
+			break
+		}
 		out.Points = make([][]uint64, len(sel.points))
 		for i, pt := range sel.points {
 			out.Points[i] = append([]uint64(nil), pt...)
@@ -1147,20 +1178,40 @@ func h5rSelectionPublic(sel *h5sSelection, rank uint32) (h5.Selection, error) {
 	case h5sSelHyperslabs:
 		out.Type = h5.SelHyperslab
 		if !sel.regular {
+			if len(sel.blocks) == 0 {
+				break
+			}
 			out.Blocks = make([][2][]uint64, len(sel.blocks))
 			for i, b := range sel.blocks {
 				out.Blocks[i] = [2][]uint64{append([]uint64(nil), b[0]...), append([]uint64(nil), b[1]...)}
 			}
 			break
 		}
-		if slices.Contains(sel.count, h5sUnlimited) || slices.Contains(sel.block, h5sUnlimited) {
-			/* An unlimited selection has no block list
-			 * (H5Sget_select_hyper_blocklist fails) */
-			break
-		}
 		nd := len(sel.start)
 		if len(sel.count) != nd || (sel.stride != nil && len(sel.stride) != nd) || (sel.block != nil && len(sel.block) != nd) {
 			return h5.Selection{}, errorf(H5E_DATASPACE, H5E_BADVALUE, "inconsistent hyperslab selection")
+		}
+		if slices.Contains(sel.count, h5sUnlimited) || slices.Contains(sel.block, h5sUnlimited) {
+			/* An unlimited selection has no block list
+			 * (H5Sget_select_hyper_blocklist fails): report the regular
+			 * hyperslab (H5Sget_regular_hyperslab) */
+			hs := &h5.Hyperslab{
+				Start:  append([]uint64(nil), sel.start...),
+				Stride: make([]uint64, nd),
+				Count:  append([]uint64(nil), sel.count...),
+				Block:  make([]uint64, nd),
+			}
+			for d := range nd {
+				hs.Stride[d], hs.Block[d] = 1, 1
+				if sel.stride != nil {
+					hs.Stride[d] = sel.stride[d]
+				}
+				if sel.block != nil {
+					hs.Block[d] = sel.block[d]
+				}
+			}
+			out.Unlimited = hs
+			break
 		}
 		total := uint64(1)
 		for _, c := range sel.count {

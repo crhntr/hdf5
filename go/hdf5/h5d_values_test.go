@@ -23,47 +23,12 @@ import (
  * Generated file: testdata/dset.h5 (see testdata/gen_dset.c)
  */
 
-// testVdsOpener is a source dataset opener for virtual datasets used by the
-// tests until the public group traversal is available: "." is the virtual
-// dataset's file, other names are relative to its directory; datasets are
-// found with testWalkDatasets.
-func testVdsOpener(t testing.TB) func(f *File, fileName, dsetName string) (*File, *h5dShared, error) {
-	return func(f *File, fileName, dsetName string) (*File, *h5dShared, error) {
-		src := f
-		if fileName != "." {
-			name := h5dCombinePath(f.dir, fileName)
-			if _, err := os.Stat(name); err != nil {
-				return nil, nil, nil
-			}
-			var err error
-			if src, err = Open(name); err != nil {
-				return nil, nil, err
-			}
-			t.Cleanup(func() { src.Close() })
-		}
-		refs, _ := testWalkDatasets(t, src)
-		for _, r := range refs {
-			if r.path == dsetName {
-				oh, err := src.oProtect(r.addr)
-				if err != nil {
-					return nil, nil, err
-				}
-				ds, err := src.dOpen(oh)
-				return src, ds, err
-			}
-		}
-		return nil, nil, nil
-	}
-}
-
-// testOpenGenerated opens a dataset of testdata/dset.h5, wiring the test
-// source opener into virtual datasets (and refreshing their extent, as
-// H5Dget_space does).
+// testOpenGenerated opens a dataset of testdata/dset.h5 (refreshing the
+// extent of virtual datasets, as H5Dget_space does).
 func testOpenGenerated(t *testing.T, f *File, path string) *h5dShared {
 	t.Helper()
 	ds := testOpenDataset(t, f, path)
 	if ds.virt != nil {
-		ds.virt.openSource = testVdsOpener(t)
 		_, err := f.h5dGetSpace(ds)
 		require.NoError(t, err)
 	}
@@ -219,13 +184,21 @@ func TestDatasetGenerated(t *testing.T) {
 		assert.Equal(t, i32s(13, -9, 21, 23, -9), vals)
 	})
 
-	t.Run("virtual source lookup stub", func(t *testing.T) {
-		oh, err := f.oProtect(testFindDataset(t, f, "/vds"))
+	t.Run("virtual source lookup", func(t *testing.T) {
+		/* Same file */
+		src, ds, err := f.dVirtualOpenSource(".", "/compact")
 		require.NoError(t, err)
-		ds, err := f.dOpen(oh)
-		require.NoError(t, err)
-		_, err = f.dReadValues(ds, nil)
-		assert.ErrorIs(t, err, ErrUnsupported)
+		require.NotNil(t, ds)
+		assert.Same(t, f, src)
+		assert.Equal(t, []uint64{3, 4}, ds.dataspace().Dims)
+
+		/* Missing dataset, missing file, not a dataset: no error, no dataset */
+		for _, c := range [][2]string{{".", "/no_such_dataset"}, {"no_such_file.h5", "/x"}, {".", "/"}} {
+			src, ds, err := f.dVirtualOpenSource(c[0], c[1])
+			assert.NoError(t, err, c)
+			assert.Nil(t, ds, c)
+			assert.Nil(t, src, c)
+		}
 	})
 
 	t.Run("chunk iteration", func(t *testing.T) {
@@ -821,9 +794,6 @@ func TestDatasetCorrupt(t *testing.T) {
 					ds, err := f.dOpen(oh)
 					if err != nil {
 						continue
-					}
-					if ds.virt != nil {
-						ds.virt.openSource = testVdsOpener(t)
 					}
 					_, _ = ds.layoutInfo()
 					_, _ = ds.fillValue(f)

@@ -193,6 +193,11 @@ func h5sFromExtent(ext *h5sExtent) (*h5s, error) {
 			return nil, err
 		}
 		ds.extent.version = ext.version
+		/* (the decoded extent is kept as is (H5S_read): no maximum
+		 *  dimensions when the message stores none) */
+		if ext.max == nil {
+			ds.extent.max = nil
+		}
 		if ext.rank != uint32(len(ext.size)) {
 			return nil, errorf(H5E_DATASPACE, H5E_BADVALUE, "extent rank %d does not match %d dimensions", ext.rank, len(ext.size))
 		}

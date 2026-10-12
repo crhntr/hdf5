@@ -18,7 +18,6 @@ package hdf5
 // dRead / dReadValues with the returned dataspace.
 
 import (
-	"errors"
 	"math/bits"
 	"path/filepath"
 	"strings"
@@ -217,10 +216,9 @@ func (f *File) dOpen(oh *h5o) (*h5dShared, error) {
 
 	/* (H5Dget_space runs H5D__virtual_set_extent_unlim: do it once here so
 	 *  that dataspace() reports the extent derived from the source
-	 *  datasets. While the source dataset lookup is not available
-	 *  (ErrUnsupported) the stored extent is kept; reads then fail.) */
+	 *  datasets.) */
 	if dataset.layout.typ == h5dVirtual {
-		if err := f.h5dVirtualSetExtentUnlim(dataset); err != nil && !errors.Is(err, ErrUnsupported) {
+		if err := f.h5dVirtualSetExtentUnlim(dataset); err != nil {
 			return nil, wrapf(err, H5E_DATASET, H5E_CANTINIT, "unable to update virtual dataset extent")
 		}
 	}
@@ -312,18 +310,34 @@ func (ds *h5dShared) storageSize(f *File) uint64 {
 }
 
 // layoutInfo describes the dataset's storage layout (the H5Pget_layout,
-// H5Pget_chunk, H5Dget_offset / H5Dget_storage_size and H5Pget_external
-// queries).
+// H5Pget_chunk, H5Dget_offset / H5Dget_storage_size, H5Pget_external and
+// H5Pget_virtual_* queries).
+//
+// For contiguous storage Size is the allocated size when the storage is
+// allocated and the size of the dataset's elements (number of elements ×
+// datatype size) otherwise. Virtual lists the mappings with their names as
+// stored in the file and their selections as h5rSelectionPublic converts
+// them (the source selection with the extent of the source dataset once it
+// has been opened).
 func (ds *h5dShared) layoutInfo() (h5.Layout, error) {
 	l := h5.Layout{Class: h5.LayoutClass(ds.layout.typ), Version: ds.layout.version}
 	switch ds.layout.typ {
 	case h5dCompact:
 		l.CompactSize = ds.layout.compactSize
 	case h5dContiguous:
-		if a := ds.f.h5dGetOffset(ds); addrDefined(a) {
-			l.Address, l.AddressDefined = a, true
+		/* (Address is HADDR_UNDEF when the storage is not allocated, as
+		 *  H5Dget_offset returns it) */
+		l.Address = ds.f.h5dGetOffset(ds)
+		if addrDefined(l.Address) {
+			l.AddressDefined = true
+			l.Size = ds.layout.contigSize
+		} else {
+			/* (no storage: the size the data would take) */
+			hi, lo := bits.Mul64(ds.dataspace().NumElems(), ds.typ.Size)
+			if hi == 0 {
+				l.Size = lo
+			}
 		}
-		l.Size = ds.layout.contigSize
 		for u := 0; u < ds.dcplCache.efl.nused && u < len(ds.dcplCache.efl.slot); u++ {
 			s := ds.dcplCache.efl.slot[u]
 			l.External = append(l.External, h5.ExternalFile{Name: s.name, Offset: uint64(s.offset), Size: s.size})
@@ -338,15 +352,56 @@ func (ds *h5dShared) layoutInfo() (h5.Layout, error) {
 			l.ChunkDims[u] = uint64(ds.chunk.dim[u])
 		}
 	case h5dVirtual:
+		/* (The creation property list holds the layout as it was when the
+		 *  dataset was opened (H5D__layout_oh_read copies it after
+		 *  H5D__virtual_init): the virtual selections have the dataset's
+		 *  rank, the source selections the rank they were decoded with
+		 *  (0 for "all" and "none"), whatever source datasets were opened
+		 *  since.) */
+		if ds.layout.virt == nil {
+			return l, errorf(H5E_DATASET, H5E_BADVALUE, "virtual storage not initialized")
+		}
+		for i := range ds.layout.virt.list {
+			ent := &ds.layout.virt.list[i]
+			m := h5.VirtualMapping{SourceFile: ent.sourceFileName, SourceDataset: ent.sourceDsetName}
+			var err error
+			if m.SourceSelection, err = h5dVirtualSelectionPublic(ent.sourceSelect, 0); err != nil {
+				return l, wrapf(err, H5E_PLIST, H5E_CANTGET, "unable to get source selection of mapping %d", i)
+			}
+			if m.VirtualSelection, err = h5dVirtualSelectionPublic(ent.virtualSelect, uint32(ds.ndims)); err != nil {
+				return l, wrapf(err, H5E_PLIST, H5E_CANTGET, "unable to get virtual selection of mapping %d", i)
+			}
+			l.Virtual = append(l.Virtual, m)
+		}
 	default:
 		return l, errorf(H5E_DATASET, H5E_BADTYPE, "unknown dataset layout type %d", ds.layout.typ)
 	}
 	return l, nil
 }
 
-// h5dFilterName returns the name H5Pget_filter2 reports for a filter: its
-// name in the pipeline message, else the name of the library's filter
-// class.
+// h5dVirtualSelectionPublic converts a mapping selection
+// (H5Pget_virtual_vspace / H5Pget_virtual_srcspace) to the shared
+// vocabulary. The rank is that of the dataspace holding the selection:
+// rank when it is not 0, else the selection's own.
+func h5dVirtualSelectionPublic(sel *h5sSelection, rank uint32) (h5.Selection, error) {
+	if sel == nil {
+		return h5.Selection{}, errorf(H5E_DATASPACE, H5E_BADVALUE, "missing mapping selection")
+	}
+	if rank == 0 {
+		rank = sel.rank
+	}
+	out, err := h5rSelectionPublic(sel, rank)
+	if err != nil {
+		return h5.Selection{}, err
+	}
+	out.Rank = int(rank)
+	return out, nil
+}
+
+// h5dFilterName returns the name H5Pget_filter2 reports for a filter
+// (H5P__get_filter): its name in the pipeline message, else the name of the
+// library's filter class, else "Unknown library filter" for an unknown
+// filter id below 256 and "" for other unknown filters.
 func h5dFilterName(filter *h5zFilterInfo) string {
 	if filter.name != "" {
 		return filter.name
@@ -370,7 +425,7 @@ func h5dFilterName(filter *h5zFilterInfo) string {
 	if filter.id < h5zFilterReserved {
 		return "Unknown library filter"
 	}
-	return "Unknown filter"
+	return ""
 }
 
 // filters returns the filter pipeline (H5Pget_nfilters / H5Pget_filter2).
@@ -410,7 +465,9 @@ func h5pIsFillValueDefined(fill *h5oFill) int {
 // H5Pfill_value_defined, H5Pget_fill_time, H5Pget_alloc_time). Value holds
 // the user-defined fill value as raw bytes in the dataset's datatype; it is
 // checked to decode (h5tDecodeValues) so that a broken fill value is
-// reported here.
+// reported here. For datatypes with variable-length or reference parts,
+// whose raw form refers to the file's heaps, Value is nil (as package chdf5
+// reports it: the memory form libhdf5 returns is not the file form).
 func (ds *h5dShared) fillValue(f *File) (h5.FillValueInfo, error) {
 	fill := &ds.dcplCache.fill
 	info := h5.FillValueInfo{
@@ -424,6 +481,9 @@ func (ds *h5dShared) fillValue(f *File) (h5.FillValueInfo, error) {
 	case h5dFillValueDefault:
 	case h5dFillValueUserDefined:
 		info.Defined = true
+		if h5dTypeHasHeapRefs(ds.typ) {
+			break
+		}
 		info.Value = append([]byte(nil), fill.buf[:ds.typ.Size]...)
 		if _, err := h5tDecodeValues(f, ds.typ, info.Value, 1); err != nil {
 			return info, wrapf(err, H5E_DATASET, H5E_CANTCONVERT, "unable to convert fill value")

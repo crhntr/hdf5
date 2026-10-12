@@ -221,12 +221,17 @@ func (f *File) Name() string { return f.name }
 
 // Close closes the file and any external files opened through it.
 func (f *File) Close() error {
+	f.mu.Lock()
 	if f.closed {
+		f.mu.Unlock()
 		return nil
 	}
 	f.closed = true
+	extFiles := f.extFiles
+	f.extFiles = nil
+	f.mu.Unlock()
 	var first error
-	for _, ef := range f.extFiles {
+	for _, ef := range extFiles {
 		if err := ef.Close(); err != nil && first == nil {
 			first = err
 		}
