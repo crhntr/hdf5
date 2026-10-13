@@ -4,6 +4,7 @@ package hdf5
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/crhntr/hdf5/go/h5"
 )
@@ -101,7 +102,9 @@ func (f *File) locateSignature() (haddr, error) {
 		if addr+h5fSignatureLen > f.fd.EOF() {
 			break
 		}
-		if _, err := f.fd.ReadAt(buf, int64(addr)); err != nil {
+		/* (io.ReaderAt may return io.EOF with a full buffer at the end of the
+		 *  input) */
+		if n, err := f.fd.ReadAt(buf, int64(addr)); err != nil && (err != io.EOF || n < len(buf)) {
 			return haddrUndef, wrapf(err, H5E_IO, H5E_CANTINIT, "unable to read file signature")
 		}
 		if bytes.Equal(buf, h5fSignature) {
@@ -123,16 +126,16 @@ func (f *File) superRead() error {
 		return &Error{Major: H5E_FILE, Minor: H5E_NOTHDF5, Msg: "file signature not found"}
 	}
 
-	// Read the fixed part plus the largest possible variable part and let the
-	// decoder consume what it needs (the C code reads
-	// H5F_SUPERBLOCK_SPEC_READ_SIZE first and then the final size).
-	const maxVarlen = 15 + 2 + 2 + 4*32 + (32 + 32 + 8 + 2*32) // v1 with 32-byte addresses/lengths
-	n := h5fSuperblockFixedSize + maxVarlen
+	// Read the fixed part plus the largest possible variable part (version 1
+	// with 32-byte addresses and lengths) and let the decoder consume what
+	// it needs (the C code reads H5F_SUPERBLOCK_SPEC_READ_SIZE first and then
+	// the final size).
+	n := h5fSuperblockFixedSize + h5fSuperblockVarlenSize(hdf5SuperblockVersion1, 32, 32)
 	if rem := f.fd.EOF() - superAddr; uint64(n) > rem {
 		n = int(rem)
 	}
 	buf := make([]byte, n)
-	if _, err := f.fd.ReadAt(buf, int64(superAddr)); err != nil {
+	if n, err := f.fd.ReadAt(buf, int64(superAddr)); err != nil && (err != io.EOF || n < len(buf)) {
 		return wrapf(err, H5E_FILE, H5E_READERROR, "unable to read superblock")
 	}
 	p := &image{buf: buf}
