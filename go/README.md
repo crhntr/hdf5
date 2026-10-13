@@ -101,7 +101,8 @@ installed in `~/.local/hdf5-1.14.6/bin`.
 
 `conformance` (`../cgo/conformance`, test-only, cgo) proves that `hdf5`
 reads what libhdf5 reads, identically. For every `.h5`/`.hdf5` file of the
-repository (plus `go/testdata`) it opens the file with both packages and
+repository (plus `go/testdata` and the committed fixtures in
+`go/testdata/fixtures`) it opens the file with both packages and
 compares the superblock, the whole link tree (`Walk`: paths and links), and
 for every object its info, comment, links (by name and by creation order),
 attributes (names, datatypes, dataspaces, values, `ReadAttribute[T]`),
@@ -125,3 +126,42 @@ runs it verbosely: each file logs a summary line, and each test ends with
 a table of what was compared, what both packages refuse (by reason) and
 which allowed differences were met. The whole suite takes about ten
 seconds.
+
+### Golden file: the libhdf5 oracle without cgo
+
+The pure Go module's own tests cannot use cgo, so tools that only run them
+(coverage, mutation testing with gremlins) would not see the conformance
+suite. `testdata/golden/corpus.txt.gz` brings the libhdf5 results into
+them: for every file of the conformance corpus it records, as fingerprints
+(`h5.Fingerprint`, a SHA-256 of a canonical encoding of the `h5` values;
+floats by bit pattern), what libhdf5 1.14.6 reads through `chdf5`, walked
+the way the conformance suite walks it: whether the file opens, the
+superblock, every `Walk` visit and link, every object's info (without
+times), path, comment, attributes (datatype, dataspace, values,
+`ReadAttribute[T]`) and links (by name and by creation order), committed
+datatypes, every dataset's datatype, dataspace, layout (without
+`Version` / `ChunkIndex`), filters, fill value (without `Version`),
+values (up to 64 MiB), `Read[T]`, the suite's strided hyperslab and
+out-of-bounds hyperslab, soft and external link targets and the objects
+of object references (`OpenAddress`). Where libhdf5 fails (corrupt files,
+missing filter plugins, szip, missing external files) the record says so
+and the pure Go reader must fail too.
+
+`TestGolden` (`golden_test.go`) reads every recorded file with this
+package, records it the same way and compares entry by entry, applying the
+allowed differences of the conformance suite's allow-list; it reports the
+first differing entry of each file with its path and the differing fields
+(e.g. `entry 9 (V "/dset1") differs in values, Read[T], hyperslab`). It
+fails as well when a corpus file is missing from the checkout or missing
+from the golden file. It takes about 4 seconds and needs neither cgo nor
+libhdf5. The format is documented in `../cgo/internal/golden`.
+
+Regenerate the golden file with
+
+    cd ../cgo && make golden
+
+whenever the corpus, the fixtures, the canonical encoding
+(`h5/fingerprint.go`) or the `h5` types change (`make fixtures` rewrites
+the fixtures in `testdata/fixtures` first). `make test` in `../cgo` fails
+while it is stale (`TestGoldenUpToDate` compares it with live libhdf5
+output).

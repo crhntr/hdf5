@@ -5,8 +5,6 @@ package conformance
 import (
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
 	"testing"
 
@@ -28,42 +26,6 @@ func repoRoot(t testing.TB) string {
 	}
 	t.Skip("not inside an HDF5 repository checkout")
 	return ""
-}
-
-// corpusFiles returns every *.h5 / *.hdf5 test file in the repository
-// outside the Go module directories (go and cgo).
-func corpusFiles(t testing.TB) []string {
-	t.Helper()
-	root := repoRoot(t)
-	var files []string
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if strings.HasPrefix(d.Name(), ".") || isModuleDir(root, path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".h5") || strings.HasSuffix(path, ".hdf5") {
-			files = append(files, path)
-		}
-		return nil
-	})
-	sort.Strings(files)
-	return files
-}
-
-// isModuleDir reports whether path is one of the top-level Go module
-// directories of the repository rooted at root (go and cgo); their test
-// files are not part of the repository corpus.
-func isModuleDir(root, path string) bool {
-	if filepath.Dir(path) != root {
-		return false
-	}
-	name := filepath.Base(path)
-	return name == "go" || name == "cgo"
 }
 
 var dirLocks sync.Map // directory -> *sync.Mutex

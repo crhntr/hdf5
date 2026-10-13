@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	chdf5 "github.com/crhntr/hdf5/cgo"
+	"github.com/crhntr/hdf5/cgo/internal/golden"
 	"github.com/crhntr/hdf5/go"
 	"github.com/crhntr/hdf5/go/h5"
 )
@@ -828,14 +829,9 @@ func readFailure(cd *chdf5.Dataset, filters []h5.Filter, l h5.Layout) string {
 	return "libhdf5 read error"
 }
 
-// filesOf lists the files to compare: the repository corpus and the pure
-// Go package's generated test files.
+// filesOf lists the files to compare: the repository corpus, the pure Go
+// package's test files and the committed fixtures (golden.Files).
 func filesOf(t *testing.T) (root string, files []string) {
 	root = repoRoot(t)
-	files = corpusFiles(t)
-	extra, _ := filepath.Glob(filepath.Join(root, "go", "testdata", "*.h5"))
-	files = append(files, extra...)
-	extra, _ = filepath.Glob(filepath.Join(root, "cgo", "testdata", "*.h5"))
-	files = append(files, extra...)
-	return root, files
+	return root, golden.Files(root)
 }
