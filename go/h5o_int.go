@@ -48,10 +48,6 @@ func (f *File) oProtect(addr haddr) (*h5o, error) {
 			return nil, wrapf(err, H5E_OHDR, H5E_CANTPROTECT, "unable to load object header")
 		}
 
-		/* Byte ranges of the chunks loaded so far, to reject continuation
-		 * messages that point back into the header (see h5oChunkOverlaps). */
-		spans := [][2]uint64{{oh.chunks[0].addr, oh.chunks[0].addr + oh.chunks[0].size}}
-
 		/* Check if there are any continuation messages to process */
 		if len(contMsgInfo.msgs) > 0 {
 			/* Construct the user data for protecting chunks */
@@ -61,6 +57,19 @@ func (f *File) oProtect(addr haddr) (*h5o, error) {
 				chunkno:  -1, /* Set to invalid value, for better error detection */
 				common:   h5oCommonCacheUd{f: f, contMsgInfo: contMsgInfo},
 			}
+
+			/* (The metadata cache holds one entry per address: a
+			 * continuation message naming the address of the object
+			 * header itself finds an entry of the wrong type, and one
+			 * naming a chunk loaded already gets that chunk back without
+			 * adding to the header; chunks that overlap at different
+			 * addresses are separate entries. loaded stands for the cache
+			 * entries of this header's chunks. chunkBytes bounds the work
+			 * done on corrupt files with overlapping chunks, which is not
+			 * in the C code: the chunks of a header that does not overlap
+			 * itself fit in the file.) */
+			loaded := map[haddr]bool{}
+			chunkBytes := oh.chunks[0].size
 
 			/* Read in continuation messages, until there are no more */
 			/* (Note that loading chunks could increase the # of continuation
@@ -73,10 +82,16 @@ func (f *File) oProtect(addr haddr) (*h5o, error) {
 				if !addrDefined(cont.addr) {
 					return nil, errorf(H5E_OHDR, H5E_CANTPROTECT, "unable to load object header chunk: undefined address")
 				}
-				i, overlap := h5oChunkOverlaps(spans, cont.addr, cont.size)
-				if overlap || cont.addr+cont.size < cont.addr {
-					return nil, errorf(H5E_OHDR, H5E_CANTPROTECT, "unable to load object header chunk: continuation block at %d (size %d) overlaps another chunk", cont.addr, cont.size)
+				if cont.addr == oh.chunks[0].addr {
+					return nil, errorf(H5E_OHDR, H5E_CANTPROTECT, "unable to load object header chunk: incorrect cache entry type")
 				}
+				if loaded[cont.addr] {
+					continue
+				}
+				if cont.size > f.eof()-chunkBytes {
+					return nil, errorf(H5E_OHDR, H5E_CANTPROTECT, "unable to load object header chunk: the chunks of the object header at %d are larger than the file", addr)
+				}
+				chunkBytes += cont.size
 
 				/* Bring the chunk into the cache */
 				/* (which adds to the object header) */
@@ -85,19 +100,12 @@ func (f *File) oProtect(addr haddr) (*h5o, error) {
 				if err := f.h5oCacheChkLoad(chkUdata); err != nil {
 					return nil, wrapf(err, H5E_OHDR, H5E_CANTPROTECT, "unable to load object header chunk")
 				}
+				loaded[cont.addr] = true
 
 				/* Sanity check */
-				if chkUdata.chunkno != chkcnt || len(oh.chunks) != chkcnt+1 || cont.chunkno != chkcnt {
+				if chkUdata.chunkno != chkcnt || len(oh.chunks) != chkcnt+1 {
 					return nil, errorf(H5E_OHDR, H5E_CANTPROTECT, "object header chunk numbering mismatch")
 				}
-
-				end := cont.addr + cont.size
-				if cont.size == 0 {
-					end = cont.addr + 1
-				}
-				spans = append(spans, [2]uint64{})
-				copy(spans[i+1:], spans[i:])
-				spans[i] = [2]uint64{cont.addr, end}
 			}
 		}
 

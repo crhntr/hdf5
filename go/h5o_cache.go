@@ -5,20 +5,20 @@ package hdf5
 // chunks (H5AC_OHDR_CHK). The serialize/notify/free callbacks are not
 // translated.
 
-import "sort"
-
 // h5oContMsgs is H5O_cont_msgs_t: the continuation messages found while
 // decoding an object header, still to be loaded.
 type h5oContMsgs struct {
 	msgs []h5oContEnt
 }
 
-// h5oContEnt is the H5O_cont_t entry stored in H5O_cont_msgs_t (address,
-// size and the chunk number the continuation block becomes).
+// h5oContEnt is the H5O_cont_t entry stored in H5O_cont_msgs_t: address
+// and size of the continuation block. (The chunk number the C code
+// records in it is only read by the write paths: a continuation message
+// naming a chunk loaded already does not become a chunk, so it is not the
+// index of a chunk.)
 type h5oContEnt struct {
-	addr    haddr
-	size    uint64
-	chunkno int
+	addr haddr
+	size uint64
 }
 
 // h5oCommonCacheUd is H5O_common_cache_ud_t.
@@ -213,12 +213,15 @@ func (f *File) h5oCacheChkDeserialize(image []byte, udata *h5oChkCacheUd) error 
 func (f *File) h5oCacheChkLoad(udata *h5oChkCacheUd) error {
 	addr := udata.common.addr
 	n := h5oCacheChkGetInitialLoadSize(udata)
-	if eof := f.eof(); addr >= eof || n > eof-addr {
-		return errorf(H5E_OHDR, H5E_CANTLOAD, "object header chunk at %d (size %d) extends beyond end of file (%d)", addr, n, eof)
-	}
-	image, err := f.readAt(addr, int(n))
-	if err != nil {
-		return wrapf(err, H5E_OHDR, H5E_READERROR, "unable to read object header chunk")
+	/* (H5FD_read returns at once for an empty read, at any address; readAt
+	 * rejects the others when they do not end within the file, as
+	 * H5FD_read does) */
+	var image []byte
+	if n > 0 {
+		var err error
+		if image, err = f.readAt(addr, int(n)); err != nil {
+			return wrapf(err, H5E_OHDR, H5E_READERROR, "unable to read object header chunk")
+		}
 	}
 	if f.opts.verifyChecksums && !h5oCacheChkVerifyChksum(image, udata) {
 		return errorf(H5E_OHDR, H5E_BADCHECKSUM, "incorrect metadata checksum after all read attempts (object header chunk at %d)", addr)
@@ -228,9 +231,9 @@ func (f *File) h5oCacheChkLoad(udata *h5oChkCacheUd) error {
 
 // h5oAddContMsg is H5O__add_cont_msg: add information from a continuation
 // message to the list of continuation messages in the object header.
-func h5oAddContMsg(contMsgInfo *h5oContMsgs, cont *h5oCont, chunkno int) {
+func h5oAddContMsg(contMsgInfo *h5oContMsgs, cont *h5oCont) {
 	/* Init the continuation message info */
-	contMsgInfo.msgs = append(contMsgInfo.msgs, h5oContEnt{addr: cont.addr, size: cont.size, chunkno: chunkno})
+	contMsgInfo.msgs = append(contMsgInfo.msgs, h5oContEnt{addr: cont.addr, size: cont.size})
 }
 
 // h5oPrefixDeserialize is H5O__prefix_deserialize: deserialize an object
@@ -592,7 +595,7 @@ func (f *File) h5oChunkDeserialize(oh *h5o, addr haddr, chunkSize uint64, image 
 
 				/* Add to continuation messages left to interpret */
 				/* (the next continuation message/chunk) */
-				h5oAddContMsg(udata.contMsgInfo, cont, len(udata.contMsgInfo.msgs)+1)
+				h5oAddContMsg(udata.contMsgInfo, cont)
 			} else if h5oRefcountID == id {
 				/* Check if message is a ref. count message */
 
@@ -659,21 +662,4 @@ func (f *File) h5oChunkDeserialize(oh *h5o, addr haddr, chunkSize uint64, image 
 
 	oh.chunks = append(oh.chunks, chunk)
 	return nil
-}
-
-// h5oChunkOverlaps reports whether the byte range [addr, addr+size) overlaps
-// one of the (sorted, non-overlapping) chunk ranges in spans, and returns
-// the index where it should be inserted. Valid object headers never have
-// overlapping chunks; the check bounds the work done on corrupt files whose
-// continuation messages point back into already-loaded chunks.
-func h5oChunkOverlaps(spans [][2]uint64, addr, size uint64) (int, bool) {
-	end := addr + size
-	if size == 0 {
-		end = addr + 1
-	}
-	i := sort.Search(len(spans), func(i int) bool { return spans[i][1] > addr })
-	if i < len(spans) && spans[i][0] < end {
-		return i, true
-	}
-	return i, false
 }

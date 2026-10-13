@@ -243,3 +243,4 @@ them):
 | reading szip-compressed data          | `ErrUnsupported`                        | works when libhdf5 has szip            |
 | VDS sources whose datatype differs from the virtual dataset's other than by byte order | different size: `ErrUnsupported`; same size: elements copied unconverted | converted by H5T_convert |
 | VDS sources in another file with variable-length or reference elements | `ErrUnsupported` | read                       |
+| object header whose continuation chunks overlap and add up to more bytes than the file | refused (bounds the work done on corrupt files) | loaded |
