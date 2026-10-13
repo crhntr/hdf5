@@ -139,7 +139,7 @@ func TestEarrayHdrInit(t *testing.T) {
 		func(h *h5eaHdr) { h.supBlkMinDataPtrs = 1 },
 		func(h *h5eaHdr) { h.eltSize = 0 },
 		func(h *h5eaHdr) { h.maxNelmtsBits = 3 },
-		func(h *h5eaHdr) { h.maxDblkPageNelmtsBits = 40 },
+		func(h *h5eaHdr) { h.maxDblkPageNelmtsBits = 64 },
 	} {
 		h := h5eaHdrAlloc(f)
 		h.eltSize, h.maxNelmtsBits, h.idxBlkElmts = 8, 32, 4

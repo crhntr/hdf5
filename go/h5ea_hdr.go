@@ -69,8 +69,11 @@ func h5eaHdrInit(hdr *h5eaHdr, cls *h5eaClass, ctx any) error {
 	if hdr.eltSize == 0 {
 		return errorf(H5E_EARRAY, H5E_BADVALUE, "element size must be greater than zero")
 	}
-	if hdr.maxDblkPageNelmtsBits > hdr.maxNelmtsBits || hdr.maxDblkPageNelmtsBits >= 64 {
-		return errorf(H5E_EARRAY, H5E_BADVALUE, "max. # of elements per data block page bits must be <= max. # of elements bits")
+	/* (the C code shifts 1 by the page size bits: undefined at 64 and
+	 *  more. Larger pages than the array are not checked: no data block
+	 *  is paged then) */
+	if hdr.maxDblkPageNelmtsBits >= 64 {
+		return errorf(H5E_EARRAY, H5E_BADVALUE, "max. # of elements per data block page bits must be < 64 (is %d)", hdr.maxDblkPageNelmtsBits)
 	}
 	if uint64(h5vmLog2Of2(uint32(hdr.dataBlkMinElmts))) > uint64(hdr.maxNelmtsBits) {
 		return errorf(H5E_EARRAY, H5E_BADVALUE, "min # of elements per data block larger than the max. # of elements")

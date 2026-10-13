@@ -153,18 +153,20 @@ func h5gLinkSortTable(ltable *h5gLinkTable, idxType h5Index, order h5IterOrder) 
 	}
 
 	/* Pick appropriate sorting routine */
+	/* (qsort in the C code, a stable merge sort in glibc: links that
+	 *  compare equal keep the order of the table) */
 	if idxType == h5IndexName {
 		if order == h5IterInc {
-			slices.SortFunc(ltable.lnks, h5gLinkCmpNameInc)
+			slices.SortStableFunc(ltable.lnks, h5gLinkCmpNameInc)
 		} else if order == h5IterDec {
-			slices.SortFunc(ltable.lnks, h5gLinkCmpNameDec)
+			slices.SortStableFunc(ltable.lnks, h5gLinkCmpNameDec)
 		}
 		/* else order == H5_ITER_NATIVE */
 	} else {
 		if order == h5IterInc {
-			slices.SortFunc(ltable.lnks, h5gLinkCmpCorderInc)
+			slices.SortStableFunc(ltable.lnks, h5gLinkCmpCorderInc)
 		} else if order == h5IterDec {
-			slices.SortFunc(ltable.lnks, h5gLinkCmpCorderDec)
+			slices.SortStableFunc(ltable.lnks, h5gLinkCmpCorderDec)
 		}
 		/* else order == H5_ITER_NATIVE */
 	}

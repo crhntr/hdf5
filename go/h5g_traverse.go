@@ -8,7 +8,11 @@ package hdf5
 // step of H5G__traverse_special is omitted; intermediate group creation
 // (H5G_CRT_INTMD_GROUP) is a write operation and is not translated.
 
-import "github.com/crhntr/hdf5/go/h5"
+import (
+	"strings"
+
+	"github.com/crhntr/hdf5/go/h5"
+)
 
 // Traversal targets (H5G_TARGET_* in H5Gprivate.h).
 const (
@@ -86,8 +90,10 @@ func gTraverseSlink(ctx *gTravCtx, grpLoc *gLoc, lnk *h5oLink, objLoc *gLoc, tar
 	exists := false
 
 	/* Traverse the link */
-	/* (H5G__traverse_slink_cb) */
-	err := gTraverseReal(ctx, &tmpGrpLoc, lnk.softName, target, func(_ *gLoc, _ string, _ *h5oLink, resolved *gLoc) error {
+	/* (H5G__traverse_slink_cb. The C code passes the link value as a C
+	 *  string: it ends at its first NUL byte) */
+	softName, _, _ := strings.Cut(lnk.softName, "\x00")
+	err := gTraverseReal(ctx, &tmpGrpLoc, softName, target, func(_ *gLoc, _ string, _ *h5oLink, resolved *gLoc) error {
 		/* Check for dangling soft link */
 		if resolved == nil {
 			if chkExists {
