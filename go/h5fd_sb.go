@@ -92,5 +92,10 @@ func openMemberDriver(name string, o *openOptions) (fileDriver, error) {
 		sec2.Close()
 		return nil, nil
 	}
+	if fam, ok := probe.fd.(*familyDriver); ok {
+		/* (the file is opened with the family driver from the start: its
+		 * state is that of a fresh H5FD__family_open) */
+		fam.reopen(o.familyMemberSize)
+	}
 	return probe.fd, nil
 }

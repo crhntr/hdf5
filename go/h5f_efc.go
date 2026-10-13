@@ -21,6 +21,7 @@ type h5fPrefixOpen int
 const (
 	h5fPrefixVDS   h5fPrefixOpen = 0 /* Virtual dataset prefix */
 	h5fPrefixElink h5fPrefixOpen = 1 /* External link prefix */
+	h5fPrefixEfile h5fPrefixOpen = 2 /* External file prefix */
 )
 
 // openWithOptions is H5F_open for a file opened through another one: it

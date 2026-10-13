@@ -382,14 +382,31 @@ func (fh *h5hf) objOff(id []byte) (uint64, error) {
 
 // read is H5HF_read: return a copy of the object identified by the heap ID.
 func (fh *h5hf) read(id []byte) ([]byte, error) {
-	var obj []byte
-	err := fh.dispatch(id, "read", func(b []byte) error {
-		/* H5HF__op_read: perform "read", using a copy */
-		obj = append([]byte(nil), b...)
-		return nil
-	})
+	idFlags, err := h5hfIDFlags(id)
 	if err != nil {
 		return nil, err
+	}
+
+	/* Check type of object in heap */
+	var obj []byte
+	switch idFlags & h5hfIDTypeMask {
+	case h5hfIDTypeMan:
+		/* Read object from managed heap blocks */
+		if obj, err = h5hfManRead(fh.hdr, id); err != nil {
+			return nil, wrapf(err, H5E_HEAP, H5E_CANTGET, "can't read object from fractal heap")
+		}
+	case h5hfIDTypeHuge:
+		/* Read 'huge' object from file */
+		if obj, err = h5hfHugeRead(fh, id); err != nil {
+			return nil, wrapf(err, H5E_HEAP, H5E_CANTGET, "can't read 'huge' object from fractal heap")
+		}
+	case h5hfIDTypeTiny:
+		/* Read 'tiny' object from file */
+		if obj, err = h5hfTinyRead(fh.hdr, id); err != nil {
+			return nil, wrapf(err, H5E_HEAP, H5E_CANTGET, "can't read 'tiny' object from fractal heap")
+		}
+	default:
+		return nil, errorf(H5E_HEAP, H5E_UNSUPPORTED, "heap ID type not supported yet")
 	}
 	return obj, nil
 }
@@ -398,14 +415,39 @@ func (fh *h5hf) read(id []byte) ([]byte, error) {
 // copying it. The slice passed to op aliases cached heap data and must not
 // be modified or retained.
 func (fh *h5hf) op(id []byte, op func(obj []byte) error) error {
-	return fh.dispatch(id, "operate on", op)
+	idFlags, err := h5hfIDFlags(id)
+	if err != nil {
+		return err
+	}
+
+	/* Check type of object in heap */
+	switch idFlags & h5hfIDTypeMask {
+	case h5hfIDTypeMan:
+		/* Operate on object from managed heap blocks */
+		if err := h5hfManOp(fh.hdr, id, op); err != nil {
+			return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "can't operate on object from fractal heap")
+		}
+	case h5hfIDTypeHuge:
+		/* Operate on 'huge' object from file */
+		if err := h5hfHugeOp(fh, id, op); err != nil {
+			return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "can't operate on 'huge' object from fractal heap")
+		}
+	case h5hfIDTypeTiny:
+		/* Operate on 'tiny' object from file */
+		if err := h5hfTinyOp(fh.hdr, id, op); err != nil {
+			return wrapf(err, H5E_HEAP, H5E_CANTOPERATE, "can't operate on 'tiny' object from fractal heap")
+		}
+	default:
+		return errorf(H5E_HEAP, H5E_UNSUPPORTED, "heap ID type not supported yet")
+	}
+	return nil
 }
 
-// dispatch is the common body of H5HF_read and H5HF_op: check the heap ID
-// version and call the managed/huge/tiny routine for its type.
-func (fh *h5hf) dispatch(id []byte, what string, op func(obj []byte) error) error {
+// h5hfIDFlags returns the flag byte of a heap ID after checking its
+// version (the common prologue of H5HF_read and H5HF_op).
+func h5hfIDFlags(id []byte) (uint8, error) {
 	if len(id) == 0 {
-		return errorf(H5E_HEAP, H5E_BADVALUE, "empty heap ID")
+		return 0, errorf(H5E_HEAP, H5E_BADVALUE, "empty heap ID")
 	}
 
 	/* Get the ID flags */
@@ -413,28 +455,7 @@ func (fh *h5hf) dispatch(id []byte, what string, op func(obj []byte) error) erro
 
 	/* Check for correct heap ID version */
 	if idFlags&h5hfIDVersMask != h5hfIDVersCurr {
-		return errorf(H5E_HEAP, H5E_VERSION, "incorrect heap ID version")
+		return 0, errorf(H5E_HEAP, H5E_VERSION, "incorrect heap ID version")
 	}
-
-	/* Check type of object in heap */
-	switch idFlags & h5hfIDTypeMask {
-	case h5hfIDTypeMan:
-		/* Read object from managed heap blocks */
-		if err := h5hfManOp(fh.hdr, id, op); err != nil {
-			return wrapf(err, H5E_HEAP, H5E_CANTGET, "can't %s object from fractal heap", what)
-		}
-	case h5hfIDTypeHuge:
-		/* Read 'huge' object from file */
-		if err := h5hfHugeOp(fh, id, op); err != nil {
-			return wrapf(err, H5E_HEAP, H5E_CANTGET, "can't %s 'huge' object from fractal heap", what)
-		}
-	case h5hfIDTypeTiny:
-		/* Read 'tiny' object from file */
-		if err := h5hfTinyOp(fh.hdr, id, op); err != nil {
-			return wrapf(err, H5E_HEAP, H5E_CANTGET, "can't %s 'tiny' object from fractal heap", what)
-		}
-	default:
-		return errorf(H5E_HEAP, H5E_UNSUPPORTED, "heap ID type not supported yet")
-	}
-	return nil
+	return idFlags, nil
 }

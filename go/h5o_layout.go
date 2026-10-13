@@ -295,12 +295,9 @@ func (f *File) h5oLayoutDecode(p *image) (*h5oLayout, error) {
 						return nil, errDecodeOverflow()
 					}
 					mesg.singleFiltered = true
-					nbytes := p.length()
-					if nbytes > 0xffffffff {
-						/* (H5_CHECKED_ASSIGN to a uint32_t) */
-						return nil, errorf(H5E_OHDR, H5E_BADVALUE, "single chunk size %d out of range", nbytes)
-					}
-					mesg.singleNbytes = nbytes
+					/* (H5_CHECKED_ASSIGN to a uint32_t: an assertion only,
+					 * a release build of the library truncates) */
+					mesg.singleNbytes = uint64(uint32(p.length()))
 					mesg.singleFilterMask = p.uint32()
 				}
 

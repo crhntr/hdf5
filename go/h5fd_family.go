@@ -27,6 +27,9 @@ type familyDriver struct {
 	membSize uint64        // actual size of each member file
 	pmemSize uint64        // member size passed in from property (openOptions.familyMemberSize)
 	name     string        // name generator printf format
+	// membEOA is the end-of-address marker of each member (set by setEOA;
+	// nil before): reads past it fail, as H5FD_read does for the member.
+	membEOA []uint64
 }
 
 // h5fdFamilyGetDefaultPrintfFilename is
@@ -293,6 +296,14 @@ func (d *familyDriver) ReadAt(buf []byte, off int64) (int, error) {
 		if u >= uint64(len(d.memb)) {
 			return done, errorf(H5E_VFL, H5E_READERROR, "member file read failed: address %d is beyond the last family member", addr)
 		}
+		/* (H5FD_read on the member: the request must end at its EOA) */
+		if d.membEOA != nil && (u >= uint64(len(d.membEOA)) || sub+req > d.membEOA[u]) {
+			eoa := uint64(0)
+			if u < uint64(len(d.membEOA)) {
+				eoa = d.membEOA[u]
+			}
+			return done, errorf(H5E_VFL, H5E_READERROR, "member file read failed: addr overflow, addr = %d, size = %d, eoa = %d", sub, req, eoa)
+		}
 		if err := h5fdSec2Read(d.memb[u], buf[done:done+int(req)], sub); err != nil {
 			return done, wrapf(err, H5E_VFL, H5E_READERROR, "member file read failed")
 		}
@@ -301,6 +312,47 @@ func (d *familyDriver) ReadAt(buf []byte, off int64) (int, error) {
 		done += int(req)
 	}
 	return done, nil
+}
+
+// reopen resets the member size and the end-of-address markers of an open
+// family to the state H5FD__family_open leaves them in (pmemSize is the
+// member size from the access properties).
+func (d *familyDriver) reopen(pmemSize uint64) {
+	d.pmemSize = pmemSize
+	d.membSize = h5fdFamDefMemSize
+	if pmemSize != 0 {
+		d.membSize = pmemSize
+	}
+	if eof := d.memb[0].size; eof != 0 {
+		d.membSize = eof
+	}
+	d.membEOA = nil
+}
+
+// setEOA is H5FD__family_set_eoa for a file opened read-only: split the
+// end-of-address marker absEOA over the members with the current member
+// size. (The C routine creates the members beyond the last one; reads
+// there fail here.) The member size may change afterwards, when the
+// driver information is a message of the superblock extension, which is
+// decoded after the EOA is set (H5F__super_read): the members keep the
+// markers computed here, as in the C library.
+func (d *familyDriver) setEOA(absEOA uint64) {
+	addr := absEOA
+	d.membEOA = d.membEOA[:0]
+	for u := 0; addr != 0 || u < len(d.memb); u++ {
+		if u >= len(d.memb) {
+			break
+		}
+
+		/* Set the EOA marker for the member */
+		if addr > d.membSize {
+			d.membEOA = append(d.membEOA, d.membSize)
+			addr -= d.membSize
+		} else {
+			d.membEOA = append(d.membEOA, addr)
+			addr = 0
+		}
+	}
 }
 
 // EOF is H5FD__family_get_eof: the number of members before the last
@@ -378,6 +430,11 @@ func (f *File) sbLoadFamily(d *drvinfo) error {
 	fam, err := f.openFamilyFromName()
 	if err != nil {
 		return err
+	}
+	/* (when the driver information is a superblock extension message,
+	 * the EOA was set already, with the family's initial member size) */
+	if f.eoa != 0 && addrDefined(f.eoa) {
+		fam.setEOA(f.eoa)
 	}
 	if err := fam.sbDecode(d.buf); err != nil {
 		fam.Close()

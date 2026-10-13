@@ -146,9 +146,8 @@ func h5oSharedDecodeHeader(f *File, p *image, typeID uint16) (*h5oShared, error)
 		 * Otherwise, it is a named datatype, so copy an H5O_loc_t.
 		 */
 		if shMesg.typ == h5oShareTypeSohm {
-			if version < h5oSharedVersion3 {
-				return nil, errorf(H5E_OHDR, H5E_CANTLOAD, "shared message heap ID in shared message version %d", version)
-			}
+			/* (the C library asserts version >= H5O_SHARED_VERSION_3; a
+			 * release build decodes the heap ID of any version 2 message) */
 			if p.overflow(h5oFheapIDLen) {
 				return nil, overflow()
 			}

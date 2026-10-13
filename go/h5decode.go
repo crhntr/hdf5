@@ -215,17 +215,6 @@ func (p *image) stringN(n int) string {
 	return string(b)
 }
 
-// align is H5_ALIGN / "pad to multiple of n" on the current offset.
-func (p *image) align(n int) {
-	if n <= 1 {
-		return
-	}
-	rem := p.off % n
-	if rem != 0 {
-		p.skip(n - rem)
-	}
-}
-
 // h5Align is the H5O_ALIGN_OLD(X) macro: round X up to a multiple of 8.
 func h5AlignOld(x uint64) uint64 { return (x + 7) &^ 7 }
 
@@ -243,20 +232,6 @@ func uintVarLen(b []byte, n int) uint64 {
 		}
 	}
 	return v
-}
-
-// varLenBytes is H5VM_limit_enc_size / "number of bytes needed to encode a
-// value": returns the smallest of 1, 2, 4, 8 that can hold v.
-func varLenBytes(v uint64) int {
-	switch {
-	case v < 1<<8:
-		return 1
-	case v < 1<<16:
-		return 2
-	case v < 1<<32:
-		return 4
-	}
-	return 8
 }
 
 // h5SizeofMagic is H5_SIZEOF_MAGIC: the length of the 4-byte signature that

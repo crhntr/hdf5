@@ -123,16 +123,6 @@ func (h *h5hl) stringAt(offset uint64) (string, error) {
 // block.
 func (h *h5hl) heapGetSize() uint64 { return h.dblkSize }
 
-// hlGetSize is H5HL_get_size: the size of the data block of the local heap
-// at addr.
-func (f *File) hlGetSize(addr haddr) (uint64, error) {
-	heap, err := f.hlProtect(addr)
-	if err != nil {
-		return 0, wrapf(err, H5E_HEAP, H5E_CANTPROTECT, "unable to load heap prefix")
-	}
-	return heap.dblkSize, nil
-}
-
 // hlHeapsize is H5HL_heapsize: the size in bytes (prefix plus data block) of
 // the local heap at addr, for storage accounting.
 func (f *File) hlHeapsize(addr haddr) (uint64, error) {

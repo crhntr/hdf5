@@ -71,6 +71,12 @@ func (f *File) superExtRead() error {
 		}
 		/* Set SOHM info from file */
 		f.sohm = v.(*h5oShmesgTable)
+
+		/* (H5SM_get_info loads the master table now: a table that cannot
+		 * be loaded fails the open) */
+		if _, err := f.smGetInfo(); err != nil {
+			return wrapf(err, H5E_FILE, H5E_CANTGET, "unable to read SOHM table information")
+		}
 	}
 
 	/* Check for the extension having a 'v1 B-tree "K"' message */

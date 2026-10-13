@@ -252,15 +252,3 @@ func h5dBtreeIdxIterate(f *File, dset *h5dShared, chunkCb func(rec *h5dChunkRec)
 	}
 	return nil
 }
-
-// h5dBtreeIdxSize is H5D__btree_idx_size: the size of the B-tree nodes.
-func h5dBtreeIdxSize(f *File, dset *h5dShared) (uint64, error) {
-	sc := &dset.chunkSt
-	/* Get metadata information for B-tree */
-	info, err := f.bGetInfo(h5bBtree(), sc.btreeShared, sc.idxAddr, nil)
-	if err != nil {
-		return 0, wrapf(err, H5E_BTREE, H5E_CANTINIT, "unable to iterate over chunk B-tree")
-	}
-	/* Set the size of the B-tree */
-	return info.size, nil
-}

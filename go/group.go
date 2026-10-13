@@ -57,24 +57,15 @@ func (g *Group) Comment() (string, error) { return objComment(g.f, g.oh, g.addr)
 // order (H5Literate2 with H5_ITER_INC).
 func (g *Group) links(idxType h5Index) iter.Seq2[h5.Link, error] {
 	return func(yield func(h5.Link, error) bool) {
-		oh, err := g.header()
-		if err != nil {
-			yield(h5.Link{}, err)
-			return
-		}
-		err = g.f.gObjIterate(oh, idxType, h5IterInc, 0, nil, func(lnk *h5oLink) error {
-			/* Retrieve the info for the link */
-			info, err := gLinkToInfo(lnk)
-			if err != nil {
-				return wrapf(err, H5E_SYM, H5E_CANTGET, "unable to get info for link")
-			}
+		/* (H5L_iterate: H5G_iterate on ".") */
+		err := gIterate(g.loc(), ".", idxType, h5IterInc, 0, nil, func(info h5.Link) error {
 			if !yield(info, nil) {
 				return errBIterStop
 			}
 			return nil
 		})
 		if err != nil && !errors.Is(err, errBIterStop) {
-			yield(h5.Link{}, wrapf(err, H5E_SYM, H5E_BADITER, "error iterating over links"))
+			yield(h5.Link{}, err)
 		}
 	}
 }

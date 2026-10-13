@@ -186,8 +186,9 @@ func TestConvString(t *testing.T) {
 	assert.Equal(t, []any{"ab", "abcdef"}, convValues(t, str(h5.StrNullTerm, 6), []byte("ab\x00cd\x00abcdef")))
 	assert.Equal(t, []any{"ab\x00c", ""}, convValues(t, str(h5.StrNullPad, 6), []byte("ab\x00c\x00\x00\x00\x00\x00\x00\x00\x00")))
 	assert.Equal(t, []any{"a b", ""}, convValues(t, str(h5.StrSpacePad, 5), []byte("a b       ")))
-	_, err := h5tDecodeValues(testFile(), str(3, 2), []byte("ab"), 1)
-	assert.Error(t, err)
+	/* A reserved padding value: the bytes as they are (libhdf5 reads the
+	 * string without a conversion) */
+	assert.Equal(t, []any{"a\x00"}, convValues(t, str(3, 2), []byte("a\x00")))
 }
 
 func TestConvEnum(t *testing.T) {
