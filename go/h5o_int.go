@@ -220,19 +220,6 @@ type h5oHdrInfo struct {
 	}
 }
 
-// oGetHdrInfo is H5O_get_hdr_info: information about the object header at
-// addr.
-func (f *File) oGetHdrInfo(addr haddr) (h5oHdrInfo, error) {
-	/* Get the object header */
-	oh, err := f.oProtect(addr)
-	if err != nil {
-		return h5oHdrInfo{}, wrapf(err, H5E_OHDR, H5E_CANTLOAD, "unable to load object header")
-	}
-
-	/* Get the information for the object header */
-	return h5oGetHdrInfoReal(oh), nil
-}
-
 // h5oGetHdrInfoReal is H5O__get_hdr_info_real.
 func h5oGetHdrInfoReal(oh *h5o) h5oHdrInfo {
 	var hdr h5oHdrInfo
@@ -373,15 +360,6 @@ func (f *File) oGetNlinks(addr haddr) (uint64, error) {
 // h5oGetOhAddr is H5O_get_oh_addr.
 func h5oGetOhAddr(oh *h5o) haddr { return oh.chunks[0].addr }
 
-// h5oGetOhFlags is H5O_get_oh_flags.
-func h5oGetOhFlags(oh *h5o) uint8 { return oh.flags /* flags can be 0 */ }
-
-// h5oGetOhMtime is H5O_get_oh_mtime.
-func h5oGetOhMtime(oh *h5o) int64 { return int64(oh.mtime) }
-
-// h5oGetOhVersion is H5O_get_oh_version.
-func h5oGetOhVersion(oh *h5o) uint8 { return oh.version }
-
 // oGetRcAndType is H5O_get_rc_and_type: the reference count and type of
 // the object whose header is at addr.
 func (f *File) oGetRcAndType(addr haddr) (uint32, h5.ObjectType, error) {
@@ -394,11 +372,4 @@ func (f *File) oGetRcAndType(addr haddr) (uint32, h5.ObjectType, error) {
 	/* Set the object's reference count */
 	/* Retrieve the type of the object */
 	return oh.nlink, f.oObjTypeReal(oh), nil
-}
-
-// h5oHasChksum is H5O_has_chksum: whether the object header has checksums
-// (version 2 and later).
-func h5oHasChksum(oh *h5o) bool {
-	/* Check args */
-	return h5oSizeofChksumOh(oh) > 0
 }

@@ -408,15 +408,6 @@ func h5dVirtualParseSourceName(sourceName string) (parsedName []h5dVirtualNameSe
 	return tmpParsedName, tmpStaticStrlen, tmpNsubs, nil
 }
 
-// h5dVirtualCopyParsedName is H5D__virtual_copy_parsed_name: deep copy a
-// parsed source name.
-func h5dVirtualCopyParsedName(src []h5dVirtualNameSeg) []h5dVirtualNameSeg {
-	if src == nil {
-		return nil
-	}
-	return append([]h5dVirtualNameSeg(nil), src...)
-}
-
 // h5dVirtualBuildSourceName is H5D__virtual_build_source_name: build a
 // source file or dataset name from a parsed name, substituting blockno for
 // each %b.
@@ -588,7 +579,11 @@ func (f *File) dVirtualOpenSource(fileName, dsetName string) (srcFile *File, ds 
 	/* Check if we need to open the source file */
 	if fileName != "." {
 		/* Try opening the file */
-		srcFile, err = f.prefixOpenFile(h5fPrefixVDS, f.h5dBuildFilePrefix(f.opts.vdsPrefix), fileName)
+		var prefix string
+		if prefix, err = f.h5dBuildFilePrefix(h5fPrefixVDS); err != nil {
+			return nil, nil, err
+		}
+		srcFile, err = f.prefixOpenFile(h5fPrefixVDS, prefix, fileName)
 		if err != nil {
 			/* (try = true: the source file does not exist) */
 			return nil, nil, nil
@@ -1662,7 +1657,7 @@ func h5dVirtualReadFill(dinfo *h5dDsetIoInfo, storage *h5dVirtualStorage) error 
 	}
 
 	/* Write fill values to memory buffer */
-	fill, err := h5dFillInit(&dset.dcplCache.fill, dset.typ)
+	fill, _, err := h5dFillInit(&dset.dcplCache.fill, dset.typ)
 	if err != nil {
 		return wrapf(err, H5E_DATASET, H5E_CANTINIT, "filling buf failed")
 	}

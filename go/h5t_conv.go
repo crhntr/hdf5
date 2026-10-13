@@ -562,7 +562,12 @@ func h5tCompileString(dt *h5.Datatype) (h5tConvFunc, error) {
 			return string(bytes.TrimRight(elem, " ")), nil
 		}, nil
 	}
-	return nil, errorf(H5E_DATATYPE, H5E_UNSUPPORTED, "unsupported character padding %d", dt.StrPad)
+	/* (A reserved padding value: H5T__conv_s_s rejects it, but reading
+	 * into the file's own datatype involves no conversion and returns
+	 * the bytes as they are, which is what the C library does here.) */
+	return func(elem []byte) (any, error) {
+		return string(elem), nil
+	}, nil
 }
 
 /* ------------------------------------------------------------------------

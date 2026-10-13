@@ -91,5 +91,5 @@ type SuperblockInfo struct {
 	SymLeafK          uint
 	SnodeBtreeK       uint
 	ChunkBtreeK       uint
-	DriverName        string // 8-character driver id from the driver info block, "" when absent
+	DriverName        string // 8-character driver id from the driver info block (superblock extension driver info message for superblock versions 2 and 3), "" when absent
 }

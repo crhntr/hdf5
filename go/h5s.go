@@ -234,9 +234,6 @@ func h5sNew(ext *h5sExtent, sel *h5sSelection) (*h5s, error) {
 	return ds, nil
 }
 
-// h5sGetSimpleExtent is H5S_get_simple_extent.
-func h5sGetSimpleExtent(space *h5s) *h5sExtent { return &space.extent }
-
 // h5sGetSimpleExtentType is H5S_get_simple_extent_type.
 func h5sGetSimpleExtentType(space *h5s) h5.SpaceClass { return space.extent.typ }
 

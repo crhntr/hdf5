@@ -138,13 +138,16 @@ information instead.
 Relative external data file (EFL) names are looked up in the current
 directory only, unless a prefix is given (`WithExternalFilePrefix`,
 `HDF5_EXTFILE_PREFIX`; `${ORIGIN}` at its start is the directory of the
-HDF5 file), in both packages. Note that libhdf5 reads `HDF5_EXTFILE_PREFIX`
-and `HDF5_VDS_PREFIX` once, when the library is initialized, and `hdf5`
-when a file is opened.
+HDF5 file), in both packages. As in H5D__build_file_prefix, a non-empty
+`HDF5_EXTFILE_PREFIX` (`HDF5_VDS_PREFIX`) is used instead of the
+`WithExternalFilePrefix` (`WithVirtualPrefix`) option. Note that libhdf5
+reads `HDF5_EXTFILE_PREFIX` and `HDF5_VDS_PREFIX` once, when the library is
+initialized, and `hdf5` when a dataset is opened.
 
 Virtual dataset source files are located as H5F_prefix_open_file does: an
 absolute name as is, then `HDF5_VDS_PREFIX`, the `WithVirtualPrefix` prefix
-(`${ORIGIN}` at its start is the directory of the virtual dataset's file),
+when `HDF5_VDS_PREFIX` is not set (`${ORIGIN}` at its start is the
+directory of the virtual dataset's file),
 the directory of the virtual dataset's file, the current directory. A
 missing source file or dataset is not an error: its elements read as the
 fill value. Source files stay open until the file is closed. The VDS view

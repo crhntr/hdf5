@@ -479,7 +479,82 @@ func readRawSuperblock(name string, sizeofAddr int) (*rawSuper, error) {
 			r.driverName = string(d[8:16])
 		}
 	}
+	if r.drv == haddrUndef && r.ext != haddrUndef {
+		// Superblock version 2 and later: the driver info is a message of
+		// the superblock extension.
+		r.driverName = extDriverName(fp, at+int64(r.ext))
+	}
 	return r, nil
+}
+
+// extDriverName returns the driver name of the driver info message (type
+// 0x14) in the first chunk of the superblock extension's object header at
+// off, or "" (format: "Object Header" and "Driver Info Message" in the
+// file format specification).
+func extDriverName(fp *os.File, off int64) string {
+	b := make([]byte, 4096)
+	n, err := fp.ReadAt(b, off)
+	if err != nil && err != io.EOF {
+		return ""
+	}
+	b = b[:n]
+	type msg struct {
+		typ  int
+		data []byte
+	}
+	var msgs []msg
+	switch {
+	case len(b) >= 16 && b[0] == 1: // version 1 header
+		size := int(binary.LittleEndian.Uint32(b[8:]))
+		p, end := 16, min(16+size, len(b))
+		for p+8 <= end {
+			typ, msize := int(binary.LittleEndian.Uint16(b[p:])), int(binary.LittleEndian.Uint16(b[p+2:]))
+			p += 8
+			if p+msize > end {
+				break
+			}
+			msgs = append(msgs, msg{typ, b[p : p+msize]})
+			p += msize
+		}
+	case len(b) >= 7 && string(b[:4]) == "OHDR" && b[4] == 2: // version 2 header
+		flags := b[5]
+		p := 6
+		if flags&0x20 != 0 {
+			p += 16
+		}
+		if flags&0x10 != 0 {
+			p += 4
+		}
+		n := 1 << (flags & 3)
+		if p+n > len(b) {
+			return ""
+		}
+		var size int
+		for k := 0; k < n; k++ {
+			size |= int(b[p+k]) << (8 * k)
+		}
+		p += n
+		end := min(p+size, len(b))
+		hsize := 4
+		if flags&0x04 != 0 {
+			hsize = 6
+		}
+		for p+hsize <= end {
+			typ, msize := int(b[p]), int(binary.LittleEndian.Uint16(b[p+1:]))
+			p += hsize
+			if p+msize > end {
+				break
+			}
+			msgs = append(msgs, msg{typ, b[p : p+msize]})
+			p += msize
+		}
+	}
+	for _, m := range msgs {
+		if m.typ == 0x14 && len(m.data) >= 9 {
+			return string(m.data[1:9])
+		}
+	}
+	return ""
 }
 
 // Libver is H5F_libver_t.

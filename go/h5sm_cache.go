@@ -57,16 +57,17 @@ func h5smCacheTableDeserialize(image []byte, udata *h5smTableCacheUd) (*h5smMast
 	/* Verify that we're reading version 0 of the table; this is the only
 	 * version defined so far.
 	 */
-	if sohm.version != hdf5SharedheaderVersion {
-		return nil, errorf(H5E_SOHM, H5E_VERSION, "bad shared message table version number %d", sohm.version)
-	}
+	/* (an assertion in the C library: a release build reads a table of
+	 * any version, so the version is not checked here either) */
 
 	/* Allocate space for the master table in memory */
 	table := &h5smMasterTable{}
 
 	/* Read number of indexes and version from file superblock */
+	/* (the C library asserts that there is at least one index; more than
+	 * H5O_SHMESG_MAX_NINDEXES overflow the arrays of H5SM_get_info) */
 	table.numIndexes = uint32(sohm.nindexes)
-	if table.numIndexes == 0 || table.numIndexes > h5oShmesgMaxNindexes {
+	if table.numIndexes > h5oShmesgMaxNindexes {
 		return nil, errorf(H5E_SOHM, H5E_BADVALUE, "bad number of shared message indexes %d", table.numIndexes)
 	}
 

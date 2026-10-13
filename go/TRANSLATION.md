@@ -33,8 +33,14 @@ repository root.
    inner call failed); the `done:` label and `FUNC_ENTER/LEAVE` macros
    disappear. Keep every `H5_IS_BUFFER_OVERFLOW` check as `if p.overflow(n)`.
    Keep the version/flag validation; corrupt files must produce an error, never
-   a panic. Where the C code has an `assert`, either keep the condition as an
-   error check or drop it; never panic.
+   a panic. Where the C code has an `assert`, drop it, or keep the condition
+   as an error check only when the C code goes on to read out of bounds or
+   crash: the reference is a release build of libhdf5, in which `assert`
+   (and `H5_CHECKED_ASSIGN`) checks nothing, so what the assertion would
+   reject is accepted and hdf5 must accept it too (the SOHM table version
+   in H5SM__cache_table_deserialize, a version 2 shared message of the SOHM
+   type in H5O__shared_decode, the 32-bit single chunk size in
+   H5O__layout_decode). Never panic.
 4. **Decoding** uses the `image` cursor in `h5decode.go` (see the mapping
    table there). Raw data (dataset elements) is decoded with
    `encoding/binary` directly.
@@ -80,6 +86,32 @@ Iteration sentinels (from `h5b.go`): an iterate operator returns
 `bFind` leaf callback returns `errBNotFound` to report that the child does
 not hold the key (the C `*found = false`).
 
+## C read paths that are not translated
+
+Reading never converts between datatypes (values are decoded from the
+file's datatype, `h5t_conv.go`), so the parts of the C read path that
+exist for datatype conversion are not translated:
+
+- `src/H5Dscatgath.c`: `H5D__scatgath_read` (and its `H5D__gather_file`,
+  `H5D__scatter_mem`) is the `single_read` of a dataset only when the file
+  and memory datatypes differ or a data transform is set
+  (`H5D__dset_ioinfo_init`); without conversion the C library reads through
+  `H5D__select_read`, as `h5dSelectIO` does. The vlen fill path of
+  `H5D__fill` scatters converted values; here the fill value bytes are
+  replicated in the file's form. `go/h5d_scatgath.go` was removed for that
+  reason.
+- The chunk cache (`H5D__chunk_lock`): a chunk is read and unfiltered for
+  every access; a chunk that does not exist is filled through
+  `h5dNonexistentRead`, which applies the checks of `H5D__fill_init` /
+  `H5D__fill_refill_vl` that the cached path also applies.
+- `H5S_select_construct_projection`, `H5D__create_piece_mem_map_1d` and the
+  other shortcuts the C library takes when the memory and file selections
+  have the same shape; the chunk mapping always projects the intersection
+  (`h5dCreatePieceMemMap`). The selection operations those shortcuts use
+  (`h5sSelectShapeSame`, `h5sSelectIsRegular`, `h5sSelectAdjustS`, ...) are
+  translated and checked against libhdf5 in `h5s_test.go` and
+  `coverage_selection_test.go`.
+
 ## Verification
 
 `conformance` opens every HDF5 file in the repository with both packages
@@ -93,7 +125,15 @@ and a file the C library opens must open. The only differences allowed are
 the fields API.md lists as ignored and the entries of the allow-list in
 `cgo/conformance/allow_test.go`, each with its justification. `TestFixtures`
 compares files generated with `chdf5`'s writing API to cover the
-combinations the corpus lacks. Run it with
+combinations the corpus lacks. `TestMessageMutations` compares the two
+packages on corrupted copies of latest-format files (object header
+messages and virtual dataset mappings changed one byte at a time, checksums
+recomputed), each in a child process since libhdf5 crashes on some; it
+skips the variants on which libhdf5 crashes or reads past a buffer where
+hdf5 reports the inconsistency. `TestFilePrefixes` compares the lookup of
+external data files and virtual dataset sources under
+`HDF5_EXTFILE_PREFIX` / `HDF5_VDS_PREFIX` (read by libhdf5 when it is
+initialized, hence child processes). Run it with
 
     cd cgo && make conformance
 

@@ -890,7 +890,7 @@ func h5dChunkRead(f *File, dinfo *h5dDsetIoInfo) error {
 		} else if !skipMissingChunks {
 			/* Perform the actual read operation from the nonexistent chunk
 			 */
-			if err := h5dNonexistentRead(&chk); err != nil {
+			if err := h5dNonexistentRead(f, &chk); err != nil {
 				return wrapf(err, H5E_DATASET, H5E_READERROR, "chunked read failed")
 			}
 		}
@@ -990,9 +990,24 @@ func (f *File) h5dChunkLock(dset *h5dShared, udata *h5dChunkUd, scaled []uint64)
 
 // h5dNonexistentRead is H5D__select_read with H5D_LOPS_NONEXISTENT
 // (H5D__nonexistent_readvv): read from a chunk that was never written,
-// i.e. fill the memory selection with the fill value.
-func h5dNonexistentRead(dinfo *h5dDsetIoInfo) error {
+// i.e. fill the memory selection with the fill value. (A chunk the C
+// library brings into its chunk cache instead, H5D__chunk_lock, is filled
+// the same way: H5D__fill_init followed by H5D__fill_refill_vl.)
+func h5dNonexistentRead(f *File, dinfo *h5dDsetIoInfo) error {
 	dset := dinfo.dset
+
+	/* Initialize the fill value buffer */
+	fill, hasVlenFillType, err := h5dFillInit(&dset.dcplCache.fill, dset.typ)
+	if err != nil {
+		return wrapf(err, H5E_DATASET, H5E_CANTINIT, "can't initialize fill buffer info")
+	}
+
+	/* Check for VL datatype & fill the buffer with VL datatype fill values */
+	if hasVlenFillType {
+		if err := h5dFillRefillVl(f, dset.typ, fill); err != nil {
+			return wrapf(err, H5E_DATASET, H5E_CANTCONVERT, "can't refill fill value buffer")
+		}
+	}
 	if err := h5dFill(dset.dcplCache.fill.buf, dset.typ, dinfo.buf, dinfo.memSpace); err != nil {
 		return wrapf(err, H5E_DATASET, H5E_CANTINIT, "can't initialize fill buffer info")
 	}
@@ -1158,7 +1173,7 @@ func h5dBt2IdxIterate(f *File, dset *h5dShared, cb func(rec *h5dChunkRec) error)
 func h5dCopsEarray() *h5dChunkOps {
 	return &h5dChunkOps{
 		idxType:      h5dChunkIdxEarray,
-		isSpaceAlloc: h5dChunkIdxIsSpaceAlloc,
+		isSpaceAlloc: func(sc *h5dChunkStorage) bool { return h5dEarrayIdxIsSpaceAlloc(sc.idxAddr) },
 		/* H5D__earray_idx_init, at dataset open: the dataspace must have
 		 * exactly one unlimited dimension (the index layout is set up again
 		 * on first use) */
@@ -1196,7 +1211,7 @@ func h5dCopsEarray() *h5dChunkOps {
 func h5dCopsFarray() *h5dChunkOps {
 	return &h5dChunkOps{
 		idxType:      h5dChunkIdxFarray,
-		isSpaceAlloc: h5dChunkIdxIsSpaceAlloc,
+		isSpaceAlloc: func(sc *h5dChunkStorage) bool { return h5dFarrayIdxIsSpaceAlloc(sc.idxAddr) },
 		getAddr: func(f *File, dset *h5dShared, udata *h5dChunkUd) error {
 			sc := &dset.chunkSt
 			if sc.fa == nil {

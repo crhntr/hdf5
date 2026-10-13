@@ -19,6 +19,7 @@ package hdf5
 
 import (
 	"math/bits"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -79,14 +80,41 @@ func h5dCacheDataspaceInfo(dset *h5dShared) error {
 	if dset.currDims == nil {
 		dset.currDims, dset.maxDims = []uint64{}, []uint64{}
 	}
+
+	/* Compute the initial 'power2up' values */
+	/* (only their validity: the chunk code here does not use them) */
+	for u := 0; u < dset.ndims && u < len(dset.currDims); u++ {
+		if h5vmPower2up(dset.currDims[u]) == 0 {
+			return errorf(H5E_DATASET, H5E_CANTGET, "unable to get the next power of 2")
+		}
+	}
 	return nil
 }
 
-// h5dBuildFilePrefix is H5D__build_file_prefix: expand the external file
-// (or virtual source file) prefix. "${ORIGIN}" at the start of the prefix
-// is replaced by the directory of the HDF5 file. An empty result means "no
-// prefix" (names are relative to the current directory).
-func (f *File) h5dBuildFilePrefix(prefix string) string {
+// h5dBuildFilePrefix is H5D__build_file_prefix: the external file (or
+// virtual source file) prefix: the environment variable
+// (HDF5_EXTFILE_PREFIX or HDF5_VDS_PREFIX) when it is set, the access
+// property (WithExternalFilePrefix, WithVirtualPrefix) otherwise.
+// "${ORIGIN}" at the start of the prefix is replaced by the directory of
+// the HDF5 file. An empty result means "no prefix" (names are relative to
+// the current directory).
+func (f *File) h5dBuildFilePrefix(prefixType h5fPrefixOpen) (string, error) {
+	var prefix string
+	switch prefixType {
+	case h5fPrefixVDS:
+		prefix = os.Getenv("HDF5_VDS_PREFIX")
+		if prefix == "" {
+			prefix = f.opts.vdsPrefix
+		}
+	case h5fPrefixEfile:
+		prefix = os.Getenv("HDF5_EXTFILE_PREFIX")
+		if prefix == "" {
+			prefix = f.opts.extFilePrefix
+		}
+	default:
+		return "", errorf(H5E_DATASET, H5E_BADTYPE, "prefix name is not sensible")
+	}
+
 	/* Prefix has to be checked for NULL / empty string again because the
 	 * code above might have updated it.
 	 */
@@ -94,7 +122,7 @@ func (f *File) h5dBuildFilePrefix(prefix string) string {
 		/* filename is interpreted as relative to the current directory,
 		 * does not need to be expanded
 		 */
-		return ""
+		return "", nil
 	}
 	if strings.HasPrefix(prefix, "${ORIGIN}") {
 		/* Replace ${ORIGIN} at beginning of prefix by directory of HDF5 file */
@@ -102,9 +130,9 @@ func (f *File) h5dBuildFilePrefix(prefix string) string {
 		if dir == "" {
 			dir = "."
 		}
-		return dir + "/" + strings.TrimPrefix(strings.TrimPrefix(prefix, "${ORIGIN}"), "/")
+		return dir + "/" + strings.TrimPrefix(strings.TrimPrefix(prefix, "${ORIGIN}"), "/"), nil
 	}
-	return prefix
+	return prefix, nil
 }
 
 // dOpen is H5D__open_oid (with the parts of H5D_open that set up the
@@ -148,8 +176,12 @@ func (f *File) dOpen(oh *h5o) (*h5dShared, error) {
 	}
 
 	/* (H5D_open: get the external file and virtual dataset prefixes) */
-	dataset.extfilePrefix = f.h5dBuildFilePrefix(f.opts.extFilePrefix)
-	dataset.vdsPrefix = f.h5dBuildFilePrefix(f.opts.vdsPrefix)
+	if dataset.extfilePrefix, err = f.h5dBuildFilePrefix(h5fPrefixEfile); err != nil {
+		return nil, wrapf(err, H5E_DATASET, H5E_CANTINIT, "can't initialize external file prefix")
+	}
+	if dataset.vdsPrefix, err = f.h5dBuildFilePrefix(h5fPrefixVDS); err != nil {
+		return nil, wrapf(err, H5E_DATASET, H5E_CANTINIT, "can't initialize vds prefix")
+	}
 
 	/* Get the layout/pline/efl message information */
 	if err := f.h5dLayoutOhRead(dataset); err != nil {
@@ -209,10 +241,11 @@ func (f *File) dOpen(oh *h5o) (*h5dShared, error) {
 
 	/* Check if there is a fill value, but no type yet */
 	/* (The fill value is kept in the dataset's datatype, so no conversion
-	 *  is ever needed; just make sure the buffer holds one element.) */
-	if fillProp.buf != nil && uint64(len(fillProp.buf)) < dt.Size {
-		return nil, errorf(H5E_DATASET, H5E_BADVALUE, "fill value size doesn't match dataset's datatype size")
-	}
+	 *  is ever needed. The C library checks the size of the fill value
+	 *  only when the conversion from the dataset's datatype to a copy of
+	 *  it is not a no-op, which it is for the datatypes read here; a fill
+	 *  value shorter than an element fails where it is used, h5dFillInit
+	 *  and h5dFill.) */
 
 	/* (H5Dget_space runs H5D__virtual_set_extent_unlim: do it once here so
 	 *  that dataspace() reports the extent derived from the source
@@ -485,6 +518,11 @@ func (ds *h5dShared) fillValue(f *File) (h5.FillValueInfo, error) {
 		if h5dTypeHasHeapRefs(ds.typ) {
 			break
 		}
+		/* (H5P_get_fill_value copies an element of the datatype from the
+		 * fill value buffer) */
+		if uint64(len(fill.buf)) < ds.typ.Size {
+			return info, errorf(H5E_DATASET, H5E_BADVALUE, "fill value size doesn't match dataset's datatype size")
+		}
 		info.Value = append([]byte(nil), fill.buf[:ds.typ.Size]...)
 		if _, err := h5tDecodeValues(f, ds.typ, info.Value, 1); err != nil {
 			return info, wrapf(err, H5E_DATASET, H5E_CANTCONVERT, "unable to convert fill value")
@@ -503,7 +541,7 @@ func (ds *h5dShared) fillValueDecoded(f *File) (any, error) {
 	if h5pIsFillValueDefined(fill) == h5dFillValueUndefined {
 		return nil, nil
 	}
-	buf, err := h5dFillInit(fill, ds.typ)
+	buf, _, err := h5dFillInit(fill, ds.typ)
 	if err != nil {
 		return nil, err
 	}

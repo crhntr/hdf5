@@ -205,6 +205,9 @@ func (f *File) superRead() error {
 	if _, ok := f.fd.(*multiDriver); ok {
 		f.eoa = haddrUndef
 	}
+	if fam, ok := f.fd.(*familyDriver); ok {
+		fam.setEOA(sblock.storedEOF)
+	}
 
 	/* Check for the superblock extension and decode the messages that
 	 * matter for reading: driver info, B-tree 'K' values and the shared

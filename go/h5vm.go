@@ -40,6 +40,22 @@ func h5vmPowerOfTwo(n uint64) bool {
 	return n&(n-1) == 0 && n != 0
 }
 
+// h5vmPower2up is H5VM_power2up: round n up to the next power of 2; 0 when
+// n exceeds 2^63.
+func h5vmPower2up(n uint64) uint64 {
+	retValue := uint64(1) /* Return value */
+
+	/* Returns 0 when n exceeds 2^63 */
+	if n >= uint64(1)<<63 {
+		retValue = 0
+	}
+
+	for retValue != 0 && retValue < n {
+		retValue <<= 1
+	}
+	return retValue
+}
+
 // h5vmBitGet is H5VM_bit_get: determine the value of the n'th bit in a
 // buffer. Bits are sequentially stored in the buffer, starting with bit
 // offset 0 in the first byte's high-bit position. An offset past the end of

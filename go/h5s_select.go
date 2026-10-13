@@ -191,10 +191,15 @@ func h5sGetSelectOffset(space *h5s) (uint64, error) {
 // h5sGetSelectUnlimDim is H5S_get_select_unlim_dim: the unlimited
 // dimension of the selection, or -1.
 func h5sGetSelectUnlimDim(space *h5s) int {
-	if sel := space.selection(); sel.typ == h5sSelHyperslabs {
+	switch space.selection().typ {
+	case h5sSelAll:
+		return h5sAllUnlimDim(space)
+	case h5sSelPoints:
+		return h5sPointUnlimDim(space)
+	case h5sSelHyperslabs:
 		return h5sHyperUnlimDim(space)
 	}
-	return -1
+	return h5sNoneUnlimDim(space)
 }
 
 // h5sGetSelectNumElemNonUnlim is H5S_get_select_num_elem_non_unlim: the

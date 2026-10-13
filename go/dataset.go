@@ -26,49 +26,28 @@ func (d *Dataset) dataset() (*h5dShared, error) {
 	return d.shared, d.openErr
 }
 
-// Datatype describes the dataset's datatype (H5Dget_type). It returns nil
-// if the datatype message cannot be decoded.
+// Datatype describes the dataset's datatype (H5Dget_type). (A Dataset is
+// opened when it is created, newDataset, so the datatype has been decoded;
+// it returns nil only for a Dataset that was not.)
 func (d *Dataset) Datatype() *h5.Datatype {
-	if ds, err := d.dataset(); err == nil {
-		return ds.datatype()
-	}
-	/* (the dataset could not be opened: read the datatype message alone) */
-	oh, err := objHeader(d.f, d.oh, d.addr)
+	ds, err := d.dataset()
 	if err != nil {
 		return nil
 	}
-	v, err := d.f.msgRead(oh, h5oDtypeID)
-	if err != nil {
-		return nil
-	}
-	dt, _ := v.(*h5.Datatype)
-	return dt
+	return ds.datatype()
 }
 
 // Dataspace describes the dataset's dataspace (H5Dget_space). For a virtual
 // dataset with unlimited mappings the current dimensions are those derived
-// from the source datasets when the dataset was opened. It returns the zero
-// Dataspace if the dataspace message cannot be decoded.
+// from the source datasets when the dataset was opened.
 func (d *Dataset) Dataspace() h5.Dataspace {
-	if ds, err := d.dataset(); err == nil {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		return ds.dataspace()
-	}
-	/* (the dataset could not be opened: read the dataspace message alone) */
-	oh, err := objHeader(d.f, d.oh, d.addr)
+	ds, err := d.dataset()
 	if err != nil {
 		return h5.Dataspace{}
 	}
-	v, err := d.f.msgRead(oh, h5oSdspaceID)
-	if err != nil {
-		return h5.Dataspace{}
-	}
-	ext, ok := v.(*h5sExtent)
-	if !ok || ext == nil {
-		return h5.Dataspace{}
-	}
-	return ext.public()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return ds.dataspace()
 }
 
 // Layout describes the dataset's storage layout (H5Pget_layout,

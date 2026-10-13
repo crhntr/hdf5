@@ -284,6 +284,52 @@ main(void)
         CHECK(H5Sselect_hyperslab(s[ns], H5S_SELECT_SET, st, sr, c, b));
         emit("2d_unlim_block", s[ns++]);
     }
+    /* Selections of the same shape but different types, with more than one
+     * block (shape_same iterates over their blocks) */
+    {
+        hsize_t d[] = {10, 10};
+        hsize_t c[] = {0, 0, 0, 2};
+        emit("2d_points_pair", s[ns++] = points(2, d, 2, c));
+    }
+    {
+        hsize_t d[]  = {8, 10};
+        hsize_t se[] = {5, 5, 5, 5, 5, 7, 5, 7};
+        emit("2d_blocks_pair", s[ns++] = blocks(2, d, 2, se));
+    }
+    {
+        hsize_t d[] = {2, 10, 10};
+        hsize_t c[] = {1, 0, 0, 1, 0, 2};
+        emit("3d_points_pair", s[ns++] = points(3, d, 2, c));
+    }
+    {
+        hsize_t d[] = {10, 10};
+        hsize_t c[] = {0, 0, 0, 3};
+        emit("2d_points_far", s[ns++] = points(2, d, 2, c));
+    }
+    {
+        hsize_t d[] = {1, 2};
+        emit("1x2_all", s[ns++] = simple(2, d));
+    }
+    {
+        hsize_t d[] = {1, 2};
+        hsize_t c[] = {0, 0, 0, 1};
+        emit("1x2_points", s[ns++] = points(2, d, 2, c));
+    }
+    {
+        hsize_t d[]  = {3, 4};
+        hsize_t se[] = {0, 0, 0, 1, 2, 0, 2, 1};
+        emit("3x4_blocks", s[ns++] = blocks(2, d, 2, se));
+    }
+    {
+        hsize_t d[]  = {3, 4};
+        hsize_t se[] = {0, 2, 0, 3, 2, 2, 2, 3};
+        emit("3x4_blocks_shifted", s[ns++] = blocks(2, d, 2, se));
+    }
+    {
+        hsize_t d[] = {3, 4};
+        hsize_t c[] = {0, 2, 0, 3, 2, 2, 2, 3};
+        emit("3x4_points_shifted", s[ns++] = points(2, d, 4, c));
+    }
 
     /* Projections: src (same rank as sis), dst (same npoints as src), sis */
     printf("],\"projections\":[");
@@ -401,6 +447,47 @@ main(void)
             printf(",");
             print_arr(blk[k][1], 3);
             printf("]");
+        }
+    }
+
+    /* H5Sselect_adjust (H5S_select_adjust_s) of the limited cases by their
+     * low bounds (moving the selection to the origin) and, when the moved
+     * selection stays within the extent, by -1 in every dimension; for the
+     * "none" selection, whose bounds H5Sselect_adjust cannot get, the
+     * result is not reported */
+    printf("],\"adjust\":[");
+    {
+        int first = 1;
+        for (int i = 0; i < ns; i++) {
+            hsize_t  low[32], high[32];
+            hssize_t off[2][32];
+            int      rank = H5Sget_simple_extent_ndims(s[i]);
+            if (H5Sget_select_npoints(s[i]) == (hssize_t)H5S_UNLIMITED ||
+                H5Sget_select_type(s[i]) == H5S_SEL_NONE)
+                continue;
+            hsize_t dims[32];
+            int     nk = 2;
+            CHECK(H5Sget_select_bounds(s[i], low, high));
+            CHECK(H5Sget_simple_extent_dims(s[i], dims, NULL));
+            for (int u = 0; u < rank; u++) {
+                off[0][u] = (hssize_t)low[u];
+                off[1][u] = -1;
+                if (high[u] + 1 >= dims[u])
+                    nk = 1; /* (moving up would leave the extent) */
+            }
+            for (int k = 0; k < nk; k++) {
+                hid_t c = H5Scopy(s[i]);
+                CHECK(c);
+                CHECK(H5Sselect_adjust(c, off[k]));
+                printf("%s\n  {\"case\":%d,\"offset\":[", first ? "" : ",", i);
+                for (int u = 0; u < rank; u++)
+                    printf("%s%lld", u ? "," : "", (long long)off[k][u]);
+                printf("],\"result\":{");
+                print_info(c);
+                printf("}}");
+                first = 0;
+                H5Sclose(c);
+            }
         }
     }
     printf("]}\n");
