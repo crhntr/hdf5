@@ -462,13 +462,17 @@ func h5zFilterNbitFunc(flags uint, cdValues []uint32, buf []byte) ([]byte, error
 	if len(cdValues) == 0 || uint64(len(cdValues)) != uint64(cdValues[0]) {
 		return nil, errorf(H5E_ARGS, H5E_BADVALUE, "invalid nbit aggression level")
 	}
-	if len(cdValues) < 3 || len(cdValues) > h5zNbitMaxNParm {
-		return nil, errorf(H5E_ARGS, H5E_BADVALUE, "invalid nbit number of parameters")
-	}
 
 	/* check if need to do nbit compress or decompress
 	 * cd_values[1] stores the flag if true indicating no need to compress
 	 */
+	/* (The C code reads cd_values[1], and then cd_values[2..7], whatever
+	 * the number of parameters: fewer than these are refused here. The
+	 * number of parameters is not bounded otherwise: H5Z_NBIT_MAX_NPARMS
+	 * only bounds the parameters H5Z__set_local_nbit writes.) */
+	if len(cdValues) < 2 {
+		return nil, errorf(H5E_ARGS, H5E_BADVALUE, "invalid nbit number of parameters")
+	}
 	if cdValues[1] != 0 {
 		return buf, nil
 	}
