@@ -34,6 +34,13 @@ or `make test` / `make conformance` / `make vet` / `make fmt` in this
 directory, with `HDF5_DIR` pointing at the installation (default
 `$(HOME)/.local/hdf5-1.14.6`). With `CGO_ENABLED=0` the packages are empty.
 
+`make golden` regenerates `../go/testdata/golden/corpus.txt.gz`, the
+fingerprints of what libhdf5 reads from the conformance corpus that the
+pure Go module's `TestGolden` compares with (see `../go/README.md`), and
+`make fixtures` rewrites the committed fixtures in `../go/testdata/fixtures`
+first (`internal/fixtures`, written `WithoutTimes` so they are
+reproducible). `make test` fails while either is stale.
+
 In a checkout of the repository the `go.work` file at the root builds this
 module against `../go`; elsewhere `github.com/crhntr/hdf5/go` comes from the
 module proxy at the version go.mod requires.

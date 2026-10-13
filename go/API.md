@@ -168,7 +168,8 @@ and printf gap access properties are not exposed (libhdf5 defaults:
 - The writing API used to build fixtures: `Create(name, ...CreateOption)`
   with `WithLatestFormat`, `WithLibverBounds`, `WithUserblock`, `WithSizes`,
   `WithSymK`, `WithIstoreK`, `WithRootCreationOrder`,
-  `WithFileSpaceStrategy`, `WithFileSpacePageSize`, `WithSharedMessages`;
+  `WithFileSpaceStrategy`, `WithFileSpacePageSize`, `WithSharedMessages`,
+  `WithoutTimes`;
   `(*File).CreateGroup`, `(*File).Flush`; `(*Group).CreateGroup` (with
   `WithCreationOrder`, `WithLinkPhaseChange`), `CreateSoftLink`,
   `CreateHardLink`, `CreateExternalLink`; `WriteDataset[T]` and
@@ -182,7 +183,10 @@ and printf gap access properties are not exposed (libhdf5 defaults:
 See h5/value.go. Both packages must produce identical `[]any` for the same
 dataset/attribute, and identical `h5` descriptions: that is what
 `conformance` compares with `assert.Equal`. Floating point NaN payloads are
-compared by bit pattern.
+compared by bit pattern. `h5.WriteCanonical` / `h5.Fingerprint` (h5/fingerprint.go)
+encode these values and descriptions deterministically with the same
+notion of equality; the golden file of the pure Go tests
+(go/testdata/golden) stores such fingerprints.
 
 Conventions both packages follow:
 

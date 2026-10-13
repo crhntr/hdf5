@@ -275,3 +275,35 @@ func TestExternalLinkOptions(t *testing.T) {
 	assert.Equal(t, h5.LinkExternal, l.Type)
 	require.NoError(t, f.Close())
 }
+
+func TestWithoutTimes(t *testing.T) {
+	write := func(name string, opts ...CreateOption) []byte {
+		f, err := Create(name, append(opts, WithLatestFormat())...)
+		require.NoError(t, err)
+		g, err := f.CreateGroup("/g")
+		require.NoError(t, err)
+		_, err = WriteDataset(g, "x", []uint64{2}, []int32{1, 2})
+		require.NoError(t, err)
+		for _, path := range []string{"/", "/g", "/g/x"} {
+			o, err := f.Open(path)
+			require.NoError(t, err)
+			info, err := o.Info()
+			require.NoError(t, err)
+			if len(opts) > 0 {
+				assert.Zero(t, info.MTime, path)
+				assert.Zero(t, info.CTime, path)
+			} else {
+				assert.NotZero(t, info.CTime, path)
+			}
+		}
+		require.NoError(t, f.Close())
+		b, err := os.ReadFile(name)
+		require.NoError(t, err)
+		return b
+	}
+	dir := t.TempDir()
+	write(filepath.Join(dir, "times.h5"))
+	a := write(filepath.Join(dir, "a.h5"), WithoutTimes())
+	b := write(filepath.Join(dir, "b.h5"), WithoutTimes())
+	assert.Equal(t, a, b)
+}

@@ -98,6 +98,19 @@ combinations the corpus lacks. Run it with
     cd cgo && make conformance
 
 (or `PKG_CONFIG_PATH=... go test -v ./conformance` in `cgo`); `make test`
-in `cgo` runs it non-verbosely. A mismatch in the pure Go reader is fixed by
+in `cgo` runs it non-verbosely.
+
+The same comparison runs without cgo in the pure Go module's tests:
+`go/testdata/golden/corpus.txt.gz` holds fingerprints (`h5.Fingerprint`)
+of everything the suite compares, as libhdf5 1.14.6 reads it through
+`chdf5` (written by `cgo/cmd/hdf5-golden`, format in
+`cgo/internal/golden`), and `TestGolden` (`go/golden_test.go`) recomputes
+them with the pure Go reader and compares, with the suite's exclusions and
+allow-list. It is what coverage and mutation testing (gremlins) of the
+pure Go module measure against. Regenerate it with `cd cgo && make golden`
+whenever the corpus, the committed fixtures (`go/testdata/fixtures`,
+`make fixtures`), the canonical encoding (`go/h5/fingerprint.go`) or the
+`h5` types change; `TestGoldenUpToDate` in `cgo/conformance` fails while
+the committed file is stale. A mismatch in the pure Go reader is fixed by
 translating the C code path that libhdf5 takes, not by special-casing the
 file.

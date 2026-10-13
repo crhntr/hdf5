@@ -72,6 +72,9 @@ func (g *Group) createGroup(name string, intermediate bool, opts ...GroupOption)
 	if o.phaseChange && C.H5Pset_link_phase_change(gcpl, C.unsigned(o.maxCompact), C.unsigned(o.minDense)) < 0 {
 		return nil, h5err("H5Pset_link_phase_change")
 	}
+	if g.f.noTimes && C.H5Pset_obj_track_times(gcpl, false) < 0 {
+		return nil, h5err("H5Pset_obj_track_times")
+	}
 	cname, free := cstr(name)
 	defer free()
 	id := C.H5Gcreate2(g.id, cname, lcpl, gcpl, C.H5P_DEFAULT)
@@ -414,6 +417,9 @@ func WriteDataset[T Element](g *Group, name string, dims []uint64, data []T, opt
 	}
 	if o.allocTime >= 0 && C.H5Pset_alloc_time(dcpl, C.H5D_alloc_time_t(o.allocTime)) < 0 {
 		return nil, h5err("H5Pset_alloc_time")
+	}
+	if g.f.noTimes && C.H5Pset_obj_track_times(dcpl, false) < 0 {
+		return nil, h5err("H5Pset_obj_track_times")
 	}
 	if o.fletcher32 && C.H5Pset_fletcher32(dcpl) < 0 {
 		return nil, h5err("H5Pset_fletcher32")

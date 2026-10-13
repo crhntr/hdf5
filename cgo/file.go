@@ -39,6 +39,10 @@ type File struct {
 	root    *Group
 	state   *fileState
 	cleanup runtime.Cleanup
+
+	// noTimes: objects created in the file do not record times
+	// (WithoutTimes).
+	noTimes bool
 }
 
 // fileState is shared with the cleanups of the file's objects (which must
@@ -507,6 +511,7 @@ type createOptions struct {
 	sharedMessageMin  int
 	sharedMessageSet  bool
 	sharedMessageMask uint
+	noTimes           bool
 }
 
 // CreateOption configures Create.
@@ -562,6 +567,12 @@ func WithSharedMessages(mask uint, minSize int) CreateOption {
 	}
 }
 
+// WithoutTimes disables the recording of access, modification, change and
+// birth times in the object headers of the root group and of the groups
+// and datasets created in the file (H5Pset_obj_track_times), so that
+// writing the same content twice produces identical files.
+func WithoutTimes() CreateOption { return func(o *createOptions) { o.noTimes = true } }
+
 // Create creates (truncates) an HDF5 file for writing test fixtures. The
 // returned File supports the reading API as well.
 func Create(name string, opts ...CreateOption) (*File, error) {
@@ -616,7 +627,10 @@ func Create(name string, opts ...CreateOption) (*File, error) {
 			return nil, h5err("H5Pset_shared_mesg_index")
 		}
 	}
-	f := &File{name: name, opts: options{extLinks: true}, state: &fileState{}}
+	if o.noTimes && C.H5Pset_obj_track_times(fcpl, false) < 0 {
+		return nil, h5err("H5Pset_obj_track_times")
+	}
+	f := &File{name: name, opts: options{extLinks: true}, state: &fileState{}, noTimes: o.noTimes}
 	if err := f.makeAccessLists(); err != nil {
 		f.closeLists()
 		return nil, err
