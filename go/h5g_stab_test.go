@@ -496,7 +496,7 @@ func TestStabMutations(t *testing.T) {
 		orig, err := os.ReadFile(file)
 		require.NoError(t, err)
 		rng := rand.New(rand.NewSource(1))
-		for iter := 0; iter < 300; iter++ {
+		for iter := 0; iter < quickCount(300, 20); iter++ {
 			buf := append([]byte(nil), orig...)
 			for k := 0; k < 1+rng.Intn(8); k++ {
 				off := rng.Intn(len(buf))

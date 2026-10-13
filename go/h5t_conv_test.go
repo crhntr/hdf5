@@ -443,7 +443,7 @@ func TestConvNoPanic(t *testing.T) {
 		newEnc().hdr(h5.ClassFloat, 1, 79<<8, 16).u16(0).u16(80).u8(64, 15, 0, 64).u32(16383).b,
 	)
 	for _, msg := range msgs {
-		for k := 0; k < 300; k++ {
+		for k := 0; k < quickCount(300, 15); k++ {
 			b := append([]byte(nil), msg...)
 			if k > 0 {
 				for j := 0; j < 1+rng.Intn(3); j++ {

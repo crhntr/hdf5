@@ -381,8 +381,8 @@ func TestGroupWalkMatchesH5ls(t *testing.T) {
 	if h5ls == "" {
 		t.Skip("h5ls not installed")
 	}
-	if testing.Short() {
-		t.Skip("runs h5ls on the whole corpus")
+	if quickMode() {
+		t.Skip("quick mode: runs h5ls on the whole corpus")
 	}
 	root := repoRoot(t)
 

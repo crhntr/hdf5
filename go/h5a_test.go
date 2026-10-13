@@ -137,6 +137,9 @@ func objectAttrs(f *File, oh *h5o) ([]*h5oAttr, error) {
 // without escaping), or ok=false when
 // h5dump is not installed or fails on the file.
 func h5dumpAttrNames(t *testing.T, path string) (names []string, ok bool) {
+	if quickMode() {
+		return nil, false
+	}
 	bin := filepath.Join(os.Getenv("HOME"), ".local/hdf5-1.14.6/bin/h5dump")
 	if _, err := os.Stat(bin); err != nil {
 		return nil, false

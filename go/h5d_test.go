@@ -252,8 +252,8 @@ func testRawComparable(dt *h5.Datatype) bool {
 // corpus file, comparing the raw data with h5dump when available.
 func TestDatasetCorpusSweep(t *testing.T) {
 	bin := h5dumpBin()
-	if testing.Short() {
-		bin = ""
+	if quickMode() {
+		bin = "" // quick mode: no h5dump runs
 	}
 	cov := testCoverage{}
 	skipped := testCoverage{}

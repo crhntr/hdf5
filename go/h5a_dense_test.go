@@ -348,6 +348,7 @@ func TestAttributeCorruption(t *testing.T) {
 			if verify {
 				step = 17
 			}
+			step *= quickStride(20)
 			corruptionVariants(t, data, step, func(variant string, img []byte) {
 				defer func() {
 					if r := recover(); r != nil {

@@ -291,7 +291,7 @@ func TestSharedMessageTableCorruption(t *testing.T) {
 		{"table", sohm.addr, table.tableSize},
 		{"list", listAddr, table.indexes[1].listSize},
 	} {
-		for off := uint64(0); off < region.size; off++ {
+		for off := uint64(0); off < region.size; off += uint64(quickStride(7)) {
 			for _, verify := range []bool{false, true} {
 				img := append([]byte(nil), data...)
 				img[region.addr+off] ^= 0x5a

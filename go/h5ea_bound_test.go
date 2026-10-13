@@ -38,7 +38,7 @@ func TestArrayIterationBounded(t *testing.T) {
 				}
 				for _, start := range starts {
 					for _, val := range []byte{0xff, 0x7f, 0x40, 0x20, 0x00, 0x01} {
-						for off := 0; off < 120; off++ {
+						for off := 0; off < 120; off += quickStride(9) {
 							mutateAndIterate(t, name, data, magic, haddr(addr), start+off, val)
 						}
 					}

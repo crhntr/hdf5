@@ -87,7 +87,7 @@ The pure Go module needs nothing beyond the Go toolchain:
 
     cd go && go test ./...
 
-(or `make test` in this directory). The cgo module needs libhdf5 1.14 and
+(or `make test` in this directory). `make test-quick` (or `HDF5_QUICK_TESTS=1 go test .`, or `-short`) runs the package tests in about 4 seconds instead of 20: it skips the comparisons that run the reference tools (h5dump, h5debug, h5ls) and shortens the seeded corruption loops, keeping every check against hard-coded values, `.ddl` files and fixtures; it is meant for mutation testing (gremlins).
 pkg-config:
 
     cd cgo && PKG_CONFIG_PATH=/path/to/hdf5/lib/pkgconfig go test ./...

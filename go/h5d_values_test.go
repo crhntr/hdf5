@@ -770,7 +770,7 @@ func TestDatasetCorrupt(t *testing.T) {
 	t.Run("random corruption", func(t *testing.T) {
 		refs, _ := testWalkDatasets(t, orig)
 		seed := uint64(1)
-		for i := 0; i < 2000; i++ {
+		for i := 0; i < quickCount(2000, 20); i++ {
 			seed = seed*6364136223846793005 + 1442695040888963407
 			pos := int(seed>>33) % len(data)
 			val := byte(seed >> 17)

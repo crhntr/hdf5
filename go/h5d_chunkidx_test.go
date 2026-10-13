@@ -200,6 +200,9 @@ func TestChunkidxGenerated(t *testing.T) {
 // installation, skipping the test if it is not installed.
 func h5debugBin(t *testing.T, name string) string {
 	t.Helper()
+	if quickMode() {
+		t.Skipf("quick mode: skipping the %s comparison", name)
+	}
 	home, _ := os.UserHomeDir()
 	p := filepath.Join(home, ".local/hdf5-1.14.6/bin", name)
 	if _, err := os.Stat(p); err != nil {

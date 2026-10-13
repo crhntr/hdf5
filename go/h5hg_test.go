@@ -113,7 +113,7 @@ func TestGlobalHeapCorrupt(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewSource(1))
-	for k := 0; k < 5000; k++ {
+	for k := 0; k < quickCount(5000, 100); k++ {
 		b := append([]byte(nil), good[:128]...)
 		for j := 0; j < 1+rng.Intn(4); j++ {
 			b[rng.Intn(len(b))] = byte(rng.Intn(256))
