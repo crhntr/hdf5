@@ -410,8 +410,16 @@ func h5sSelectShapeSame(space1, space2 *h5s) (bool, error) {
 	nextB, stopB := iter.Pull2(h5sSelectIterBlocks(spaceB))
 	defer stopB()
 
+	/* Get the current block for each selection iterator (a "none"
+	 * selection has none: H5S__none_iter_block fails) */
 	startA, endA, okA := nextA()
+	if !okA {
+		return false, errorf(H5E_DATASPACE, H5E_CANTGET, "unable to get iterator block a")
+	}
 	startB, endB, okB := nextB()
+	if !okB {
+		return false, errorf(H5E_DATASPACE, H5E_CANTGET, "unable to get iterator block b")
+	}
 	for okA && okB {
 		spaceADim := spaceARank - 1
 		spaceBDim := spaceBRank - 1

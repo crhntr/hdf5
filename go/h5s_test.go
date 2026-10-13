@@ -371,6 +371,8 @@ type selFixture struct {
 	Dims        []uint64     `json:"dims"`
 	Type        int          `json:"type"`
 	Npoints     uint64       `json:"npoints"`
+	Contiguous  *bool        `json:"contiguous"` // H5S_select_is_contiguous
+	Single      *bool        `json:"single"`     // H5S_select_is_single
 	EncEarliest string       `json:"enc_earliest"`
 	EncLatest   string       `json:"enc_latest"`
 	Low         []uint64     `json:"low"`
@@ -434,6 +436,10 @@ func checkFixture(t *testing.T, fx selFixture, s *h5s, what string) {
 	t.Helper()
 	assert.Equal(t, fx.Type, h5sGetSelectType(s), what)
 	assert.Equal(t, fx.Npoints, h5sGetSelectNpoints(s), what)
+	if fx.Contiguous != nil {
+		assert.Equal(t, *fx.Contiguous, h5sSelectIsContiguous(s), what+": contiguous")
+		assert.Equal(t, *fx.Single, h5sSelectIsSingle(s), what+": single")
+	}
 	if fx.Low != nil {
 		low, high, err := h5sGetSelectBounds(s)
 		require.NoError(t, err, what)
