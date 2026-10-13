@@ -109,7 +109,12 @@ func h5dEflReadData(efl *h5oEfl, dset *h5dShared, addr uint64, buf []byte) error
 			return errorf(H5E_EFL, H5E_OVERFLOW, "read past logical end of file")
 		}
 		slot := &efl.slot[u]
-		if slot.offset < 0 || uint64(slot.offset)+skip < skip || uint64(slot.offset)+skip > 1<<63-1 {
+		/* (H5F_OVERFLOW_HSIZET2OFFT((hsize_t)offset + skip): the sum,
+		 *  computed modulo 2^64, must be a valid HDoff_t; a negative
+		 *  segment offset is accepted when the position in the segment
+		 *  brings it back into range) */
+		fileOff := slot.offset + int64(skip)
+		if fileOff < 0 {
 			return errorf(H5E_EFL, H5E_OVERFLOW, "external file address overflowed")
 		}
 		fh, err := h5dEflOpenFile(dset, slot.name)
@@ -119,7 +124,7 @@ func h5dEflReadData(efl *h5oEfl, dset *h5dShared, addr uint64, buf []byte) error
 		toRead := min(slot.size-skip, uint64(len(buf)))
 
 		/* Inner loop - read to_read bytes from a single external file */
-		n, err := fh.ReadAt(buf[:toRead], slot.offset+int64(skip))
+		n, err := fh.ReadAt(buf[:toRead], fileOff)
 		fh.Close()
 		if err != nil && err != io.EOF {
 			return wrapf(err, H5E_EFL, H5E_READERROR, "read error in external raw data file")
