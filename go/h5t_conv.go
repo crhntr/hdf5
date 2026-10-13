@@ -257,7 +257,17 @@ func h5tCompileFloat(dt *h5.Datatype) (h5tConvFunc, error) {
 // h5tConvFFState holds the variables of H5T__conv_f_f that are carried from
 // one element to the next.
 type h5tConvFFState struct {
-	msize uint64 /*useful size of mantissa in src*/
+	msize        uint64 /*useful size of mantissa in src*/
+	denormalized bool   /*is either source or destination denormalized?*/
+	/* (The C function initializes denormalized to false once, before its
+	 * conversion loop, and never resets it: once an element is
+	 * denormalized, the rounding of every following element of the same
+	 * call takes the "denormalized" branch, which drops the carry. The
+	 * state lives as long as the converter h5tCompileFloat returns: one
+	 * h5tDecodeValues call, one array element, one vlen sequence, as the
+	 * H5T__conv_f_f calls of H5T__conv_array and H5T__conv_vlen. libhdf5
+	 * also starts over for each chunk and each type conversion buffer
+	 * (1 MiB) of a dataset read.) */
 }
 
 // h5tConvFF is the body of the H5T__conv_f_f conversion loop for one
@@ -266,14 +276,13 @@ type h5tConvFFState struct {
 // is installed, so the default actions apply.
 func h5tConvFF(src, dst *h5tAtomicFloat, elem []byte, st *h5tConvFFState) ([]byte, error) {
 	var (
-		expo         int64 /*exponent			*/
-		expoMax      = (int64(1) << dst.esize) - 1
-		mpos         uint64 /*offset to useful mant is src	*/
-		mrsh         uint64 /*amount to right shift mantissa*/
-		carry        bool   /*carry after rounding mantissa	*/
-		implied      uint64 /*destination implied bits	*/
-		denormalized bool   /*is either source or destination denormalized?*/
-		bitno        int64  /*bit number			*/
+		expo    int64 /*exponent			*/
+		expoMax = (int64(1) << dst.esize) - 1
+		mpos    uint64 /*offset to useful mant is src	*/
+		mrsh    uint64 /*amount to right shift mantissa*/
+		carry   bool   /*carry after rounding mantissa	*/
+		implied uint64 /*destination implied bits	*/
+		bitno   int64  /*bit number			*/
 	)
 	s := append([]byte(nil), elem...)
 	d := make([]byte, dst.size)
@@ -356,7 +365,7 @@ func h5tConvFF(src, dst *h5tAtomicFloat, elem []byte, st *h5tConvFFState) ([]byt
 	expo = int64(h5tBitGetD(s, src.epos, src.esize))
 
 	if expo == 0 {
-		denormalized = true
+		st.denormalized = true
 	}
 
 	/*
@@ -428,7 +437,7 @@ func h5tConvFF(src, dst *h5tAtomicFloat, elem []byte, st *h5tConvFFState) ([]byt
 		 */
 		mrsh += uint64(1 - expo)
 		expo = 0
-		denormalized = true
+		st.denormalized = true
 	} else if expo >= expoMax {
 		/*
 		 * The exponent is too large to fit in the available region
@@ -451,7 +460,7 @@ func h5tConvFF(src, dst *h5tAtomicFloat, elem []byte, st *h5tConvFFState) ([]byt
 	if msize > 0 && mrsh <= dst.msize && mrsh+msize > dst.msize {
 		cut := mrsh + msize - dst.msize
 		/* If the 1st bit being cut off is set and source isn't denormalized.*/
-		if h5tBitGetD(s, (mpos+cut)-1, 1) != 0 && !denormalized {
+		if h5tBitGetD(s, (mpos+cut)-1, 1) != 0 && !st.denormalized {
 			/* Don't do rounding if exponent is 111...110 and mantissa is 111...11.
 			 * To do rounding and increment exponent in this case will create an infinity value.*/
 			if h5tBitFind(s, mpos+cut, msize-cut, h5tBitLSB, false) >= 0 || expo < expoMax-1 {
@@ -460,7 +469,7 @@ func h5tConvFF(src, dst *h5tAtomicFloat, elem []byte, st *h5tConvFFState) ([]byt
 					implied = 2
 				}
 			}
-		} else if h5tBitGetD(s, (mpos+cut)-1, 1) != 0 && denormalized {
+		} else if h5tBitGetD(s, (mpos+cut)-1, 1) != 0 && st.denormalized {
 			/* For either source or destination, denormalized value doesn't increment carry.*/
 			h5tBitInc(s, mpos+cut-1, 1+msize-cut)
 		}
@@ -651,12 +660,18 @@ func h5tCompileArray(f *File, dt *h5.Datatype) (h5tConvFunc, error) {
 	if hi != 0 || total > dt.Size {
 		return nil, errorf(H5E_DATATYPE, H5E_BADSIZE, "array elements (%d x %d bytes) exceed the array size %d", nelem, dt.Base.Size, dt.Size)
 	}
-	conv, err := h5tCompile(f, dt.Base)
-	if err != nil {
+	if _, err := h5tCompile(f, dt.Base); err != nil {
 		return nil, err
 	}
 	bsize := dt.Base.Size
 	return func(elem []byte) (any, error) {
+		/* H5T__conv_array converts each array element with its own
+		 * conversion call (the state H5T__conv_f_f carries from one
+		 * element to the next starts over) */
+		conv, err := h5tCompile(f, dt.Base)
+		if err != nil {
+			return nil, err
+		}
 		out := make([]any, nelem)
 		for i := uint64(0); i < nelem; i++ {
 			v, err := conv(elem[i*bsize : (i+1)*bsize])
@@ -743,10 +758,8 @@ func h5tCompileVlen(f *File, dt *h5.Datatype) (h5tConvFunc, error) {
 		return nil, errorf(H5E_DATATYPE, H5E_BADSIZE, "vlen datatype size %d is too small for a disk sequence", dt.Size)
 	}
 	isString := dt.VlenKind == h5.VlenString
-	var baseConv h5tConvFunc
 	if !isString {
-		var err error
-		if baseConv, err = h5tCompile(f, dt.Base); err != nil {
+		if _, err := h5tCompile(f, dt.Base); err != nil {
 			return nil, err
 		}
 	}
@@ -777,6 +790,13 @@ func h5tCompileVlen(f *File, dt *h5.Datatype) (h5tConvFunc, error) {
 				conv = conv[:i]
 			}
 			return string(conv), nil
+		}
+		/* H5T__conv_vlen converts each sequence with its own conversion
+		 * call (the state H5T__conv_f_f carries from one element to the
+		 * next starts over) */
+		baseConv, err := h5tCompile(f, dt.Base)
+		if err != nil {
+			return nil, err
 		}
 		out := make([]any, seqLen)
 		for i := uint64(0); i < seqLen; i++ {
@@ -891,7 +911,7 @@ func (f *File) h5tRefDsetregDiskRead(elem []byte) (any, error) {
 	}
 	/* (The selection is deserialized into a copy of the dataset's
 	 *  dataspace (H5S_read): its rank is the dataset's) */
-	ref.Selection, err = h5rSelectionPublic(sel, f.h5rDatasetRank(addr, sel))
+	ref.Selection, err = h5rSelectionPublic(sel, f.h5rDatasetRank(addr, sel.rank))
 	if err != nil {
 		return nil, err
 	}
@@ -899,9 +919,9 @@ func (f *File) h5tRefDsetregDiskRead(elem []byte) (any, error) {
 }
 
 // h5rDatasetRank returns the rank of the dataspace of the dataset whose
-// object header is at addr, or the rank sel was serialized with when the
-// dataspace cannot be read.
-func (f *File) h5rDatasetRank(addr haddr, sel *h5sSelection) uint32 {
+// object header is at addr, or fallback (the rank the selection was
+// serialized with) when the dataspace cannot be read.
+func (f *File) h5rDatasetRank(addr haddr, fallback uint32) uint32 {
 	if addrDefined(addr) {
 		if oh, err := f.oProtect(addr); err == nil {
 			if v, err := f.msgRead(oh, h5oSdspaceID); err == nil {
@@ -911,10 +931,7 @@ func (f *File) h5rDatasetRank(addr haddr, sel *h5sSelection) uint32 {
 			}
 		}
 	}
-	if sel != nil {
-		return sel.rank
-	}
-	return 0
+	return fallback
 }
 
 // h5rDecodeHeap is H5R__decode_heap: read the data a reference stores in
@@ -1041,7 +1058,7 @@ func (f *File) h5rDecode(buf []byte) (any, error) {
 
 	case h5.RefRegion2:
 		/* Decode dataspace */
-		sel, err := h5rDecodeRegion(f, p)
+		sel, err := h5rDecodeRegion(f, p, addr)
 		if err != nil {
 			return nil, wrapf(err, H5E_REFERENCE, H5E_CANTDECODE, "Cannot decode region")
 		}
@@ -1110,8 +1127,9 @@ func h5rDecodeString(buf []byte) (string, int, error) {
 }
 
 // h5rDecodeRegion is H5R__decode_region: decode a selection stored as its
-// serialized size, the extent rank and the serialized selection.
-func h5rDecodeRegion(f *File, buf []byte) (h5.Selection, error) {
+// serialized size, the extent rank and the serialized selection, of a
+// reference to the dataset at addr.
+func h5rDecodeRegion(f *File, buf []byte, addr haddr) (h5.Selection, error) {
 	/* Don't decode if buffer size isn't big enough */
 	if len(buf) < 2*4 {
 		return h5.Selection{}, errorf(H5E_REFERENCE, H5E_CANTDECODE, "Buffer size is too small")
@@ -1141,7 +1159,10 @@ func h5rDecodeRegion(f *File, buf []byte) (h5.Selection, error) {
 		}
 		return h5.Selection{}, wrapf(err, H5E_REFERENCE, H5E_CANTDECODE, "can't deserialize selection")
 	}
-	return h5rSelectionPublic(sel, rank)
+	/* (H5Ropen_region copies the selection onto the dataspace of the
+	 *  referenced dataset (H5R__get_region): the extent rank is the
+	 *  dataset's when its dataspace can be read) */
+	return h5rSelectionPublic(sel, f.h5rDatasetRank(addr, rank))
 }
 
 // h5rMaxSelectionBlocks bounds the number of blocks a regular hyperslab
