@@ -92,6 +92,18 @@ func TestFingerprintDistinguishes(t *testing.T) {
 		{"fill value nil", FillValueInfo{Defined: true}, FillValueInfo{Defined: true, Value: []byte{}}},
 		{"float64 slices", []float64{math.Copysign(0, -1)}, []float64{0}},
 		{"strings", []string{"a", "b"}, []string{"ab"}},
+		/* Slices of the same length whose contents differ (each slice
+		 * kind is written behind a nil marker). */
+		{"link user data", Link{Type: 65, UserData: []byte{1}}, Link{Type: 65, UserData: []byte{2}}},
+		{"fill value bytes", FillValueInfo{Defined: true, Value: []byte{1}}, FillValueInfo{Defined: true, Value: []byte{2}}},
+		{"filters", []Filter{{ID: FilterDeflate}}, []Filter{{ID: FilterShuffle}}},
+		{"float32 slices", []float32{1}, []float32{2}},
+		{"selection blocks",
+			Selection{Type: SelHyperslab, Rank: 1, Blocks: [][2][]uint64{{{0}, {1}}}},
+			Selection{Type: SelHyperslab, Rank: 1, Blocks: [][2][]uint64{{{0}, {2}}}}},
+		{"selection points",
+			Selection{Type: SelPoints, Rank: 1, Points: [][]uint64{{1}}},
+			Selection{Type: SelPoints, Rank: 1, Points: [][]uint64{{2}}}},
 	}
 	for _, p := range pairs {
 		t.Run(p.name, func(t *testing.T) {
