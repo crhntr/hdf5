@@ -83,7 +83,7 @@ func h5dCacheDataspaceInfo(dset *h5dShared) error {
 
 	/* Compute the initial 'power2up' values */
 	/* (only their validity: the chunk code here does not use them) */
-	for u := 0; u < dset.ndims && u < len(dset.currDims); u++ {
+	for u := range min(dset.ndims, len(dset.currDims)) {
 		if h5vmPower2up(dset.currDims[u]) == 0 {
 			return errorf(H5E_DATASET, H5E_CANTGET, "unable to get the next power of 2")
 		}
@@ -291,7 +291,10 @@ func (f *File) h5dGetStorageSize(dset *h5dShared) (uint64, error) {
 }
 
 // h5dGetOffset is H5D__get_offset: the absolute file offset of the raw data
-// of a contiguous dataset, or HADDR_UNDEF.
+// of a contiguous dataset, or HADDR_UNDEF. (As in the C library, the
+// offset of storage that is not allocated is HADDR_UNDEF plus the base
+// address: in a file with a user block it wraps around to the base address
+// minus one, which H5Dget_offset reports.)
 func (f *File) h5dGetOffset(dset *h5dShared) haddr {
 	switch dset.layout.typ {
 	case h5dVirtual, h5dChunked, h5dCompact:
@@ -302,9 +305,6 @@ func (f *File) h5dGetOffset(dset *h5dShared) haddr {
 		 * an external file, the value will be HADDR_UNDEF.
 		 */
 		if dset.dcplCache.efl.nused == 0 || addrDefined(dset.layout.contigAddr) {
-			if !addrDefined(dset.layout.contigAddr) {
-				return haddrUndef
-			}
 			/* Return the absolute dataset offset from the beginning of file. */
 			return dset.layout.contigAddr + f.baseAddr
 		}
@@ -358,12 +358,14 @@ func (ds *h5dShared) layoutInfo() (h5.Layout, error) {
 	case h5dCompact:
 		l.CompactSize = ds.layout.compactSize
 	case h5dContiguous:
-		/* (Address is HADDR_UNDEF when the storage is not allocated, as
-		 *  H5Dget_offset returns it) */
+		/* (Address is what H5Dget_offset returns: HADDR_UNDEF when the
+		 *  storage is not allocated, except in a file with a user block;
+		 *  Size is then H5Dget_storage_size, 0 when the storage is not
+		 *  allocated) */
 		l.Address = ds.f.h5dGetOffset(ds)
 		if addrDefined(l.Address) {
 			l.AddressDefined = true
-			l.Size = ds.layout.contigSize
+			l.Size = ds.storageSize(ds.f)
 		} else {
 			/* (no storage: the size the data would take) */
 			hi, lo := bits.Mul64(ds.dataspace().NumElems(), ds.typ.Size)
@@ -465,7 +467,7 @@ func h5dFilterName(filter *h5zFilterInfo) string {
 func (ds *h5dShared) filters() []h5.Filter {
 	pline := &ds.dcplCache.pline
 	var out []h5.Filter
-	for u := 0; u < pline.nused && u < len(pline.filter); u++ {
+	for u := range min(pline.nused, len(pline.filter)) {
 		fi := &pline.filter[u]
 		out = append(out, h5.Filter{
 			ID:       h5.FilterID(fi.id),

@@ -306,7 +306,7 @@ func h5dVirtualUpdateMinDims(virt *h5dVirtualStorage, idx int) error {
 	}
 
 	/* Update min_dims */
-	for i := 0; i < rank && i < len(virt.minDims); i++ {
+	for i := range min(rank, len(virt.minDims)) {
 		/* Don't check unlimited dimensions in the selection */
 		if i != ent.unlimDimVirtual && boundsEnd[i] >= virt.minDims[i] {
 			virt.minDims[i] = boundsEnd[i] + 1
@@ -320,7 +320,7 @@ func h5dVirtualUpdateMinDims(virt *h5dVirtualStorage, idx int) error {
 // the mappings.
 func h5dVirtualCheckMinDims(dset *h5dShared) error {
 	/* Verify that dimensions are larger than min_dims */
-	for i := 0; i < dset.ndims && i < len(dset.virt.minDims); i++ {
+	for i := range min(dset.ndims, len(dset.virt.minDims)) {
 		if dset.currDims[i] < dset.virt.minDims[i] {
 			return errorf(H5E_ARGS, H5E_BADVALUE, "virtual dataset dimensions not large enough to contain all limited dimensions in all selections")
 		}

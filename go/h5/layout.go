@@ -46,7 +46,8 @@ type Layout struct {
 	ChunkIndex ChunkIndex
 
 	// Contiguous: address and size of the data; AddressDefined is false when
-	// storage was never allocated.
+	// storage was never allocated (except in a file with a user block, where
+	// H5Dget_offset reports the base address minus one, see API.md).
 	Address        uint64
 	AddressDefined bool
 	Size           uint64

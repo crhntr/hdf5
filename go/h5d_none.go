@@ -69,7 +69,7 @@ func h5dNoneIdxIterate(f *File, dset *h5dShared, chunkCb func(rec *h5dChunkRec) 
 		return errorf(H5E_DATASET, H5E_BADVALUE, "implicit chunk index address is undefined")
 	}
 	ndims := int(layout.ndims) - 1
-	if ndims <= 0 || len(layout.chunks) < ndims {
+	if len(layout.chunks) < ndims {
 		return errorf(H5E_DATASET, H5E_BADVALUE, "chunk information not set up")
 	}
 

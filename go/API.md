@@ -198,7 +198,9 @@ Conventions both packages follow:
 - `Layout.Address` is `^uint64(0)` (HADDR_UNDEF) with `AddressDefined`
   false for unallocated contiguous storage; `Layout.Size` is then the size
   of the data (number of elements × datatype size), otherwise the
-  allocated size.
+  allocated size. (In a file with a user block, H5Dget_offset adds the
+  base address to HADDR_UNDEF: unallocated storage there has the base
+  address minus one as a defined `Address`, with `Size` 0.)
 - `Layout.Virtual` lists the mappings in order with the source file and
   dataset names as stored in the file (printf-style `%b` included) and the
   selections of the creation property list (as H5Pget_virtual_vspace /
