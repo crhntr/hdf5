@@ -322,13 +322,13 @@ func TestMutationUndefinedFill(t *testing.T) {
 	}
 }
 
-// u8Type is the datatype message body of H5T_STD_U8LE.
-func u8Type() []byte { return []byte{0x10, 0, 0, 0, 1, 0, 0, 0, 0, 0, 8, 0} }
+// u8TypeBytes is the datatype message body of H5T_STD_U8LE.
+func u8TypeBytes() []byte { return []byte{0x10, 0, 0, 0, 1, 0, 0, 0, 0, 0, 8, 0} }
 
 // vlenStrType is the datatype message body of a variable-length ASCII
 // string of the given (stored) size.
 func vlenStrType(size byte) []byte {
-	return append([]byte{0x19, 1, 0, 0, size, 0, 0, 0}, u8Type()...)
+	return append([]byte{0x19, 1, 0, 0, size, 0, 0, 0}, u8TypeBytes()...)
 }
 
 // TestMutationVlenFill: chunked datasets {4} with missing chunks whose user
