@@ -12,6 +12,8 @@ package hdf5
 // datasets into sub-selections of that space.
 
 import (
+	"math"
+
 	"github.com/crhntr/hdf5/go/h5"
 )
 
@@ -66,6 +68,11 @@ func h5dFileSpaceOf(ds *h5dShared, fileSpace *h5s) (*h5s, error) {
 	return space, nil
 }
 
+// h5dMaxReadBytes bounds the size of the buffer dRead allocates: the
+// largest slice the Go runtime can allocate (make panics beyond 2^48
+// bytes on 64-bit platforms, beyond the largest int on 32-bit ones).
+const h5dMaxReadBytes = min(1<<48, math.MaxInt)
+
 // dRead is H5Dread with the dataset's file datatype as the memory type and
 // a contiguous memory buffer: it returns the raw bytes of the elements
 // selected by fileSpace (in selection order). A nil fileSpace reads the
@@ -86,7 +93,7 @@ func (f *File) dRead(ds *h5dShared, fileSpace *h5s) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if size > uint64(int(^uint(0)>>1)) {
+	if size > h5dMaxReadBytes {
 		return nil, errorf(H5E_DATASET, H5E_OVERFLOW, "selection too large to read (%d bytes)", size)
 	}
 	buf := make([]byte, size)

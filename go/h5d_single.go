@@ -39,16 +39,11 @@ func h5dSingleIdxIsSpaceAlloc(sc *h5dChunkStorage) bool {
 }
 
 // h5dSingleIdxGetAddr is H5D__single_idx_get_addr: get the file address of
-// the chunk.
+// the chunk. (The C library only asserts that the dataset has a single
+// chunk: when the dataspace is larger than the chunk, every chunk of the
+// dataspace is read from the one chunk.)
 func h5dSingleIdxGetAddr(_ *File, dset *h5dShared, udata *h5dChunkUd) error {
 	sc := &dset.chunkSt
-
-	/* (A single chunk index holds exactly one chunk) */
-	for u := 0; u < dset.ndims; u++ {
-		if udata.scaled[u] != 0 {
-			return errorf(H5E_DATASET, H5E_BADVALUE, "chunk coordinates out of range of a single chunk index")
-		}
-	}
 
 	udata.chunkBlock.offset = sc.idxAddr
 	if dset.chunk.flags&h5oLayoutChunkSingleIndexWithFilter != 0 {
