@@ -11,9 +11,11 @@ package hdf5
 // deserializes the prefetched image instead of reading the file
 // (H5C__deserialize_prefetched_entry).
 //
-// Here the decoded entries are kept in File.cacheImage and overlaid on the
-// bytes read from the file (File.readAt / File.readInto), which gives the
-// metadata decoders the same images. The flush dependencies, LRU ranks and
+// Here the decoded entries are kept in File.cacheImage; a read at the
+// address of an entry (File.readAt / File.readInto) returns the entry's
+// image, or the bytes of the file with the image over their start for a
+// speculative read longer than the entry, which gives the metadata
+// decoders the same images. The flush dependencies, LRU ranks and
 // adaptive resize status only matter to a writable cache and are not
 // kept.
 
@@ -278,42 +280,41 @@ func (f *File) h5cReconstructCacheEntry(p *image) (h5cPrefetched, error) {
 	if size > uint64(p.remaining()) {
 		return e, errorf(H5E_CACHE, H5E_OVERFLOW, "ran off end of input buffer while decoding")
 	}
+	/* (libhdf5 checks nothing else: an entry may lie anywhere in the
+	 *  address space, even where its end wraps around; entries are only
+	 *  looked up by their address, see cacheImageAt) */
 	e.image = p.bytes(int(size))
-	if e.addr+size < e.addr {
-		return e, errorf(H5E_CACHE, H5E_BADVALUE, "invalid entry offset")
-	}
 	return e, nil
 }
 
-// cacheImageEntry returns the prefetched entry holding all of [addr,
-// addr+n), if any (H5C__SEARCH_INDEX finding a prefetched entry: the
-// protect deserializes its image without reading the file).
-func (f *File) cacheImageEntry(addr haddr, n uint64) []byte {
-	i := sort.Search(len(f.cacheImage), func(i int) bool { return f.cacheImage[i].addr > addr }) - 1
-	if i < 0 {
-		return nil
-	}
-	e := &f.cacheImage[i]
-	if off := addr - e.addr; off <= uint64(len(e.image)) && n <= uint64(len(e.image))-off {
-		return e.image[off : off+n]
+// cacheImageAt returns the prefetched entry at addr, if any
+// (H5C__SEARCH_INDEX: the cache finds entries by their address only; an
+// entry that merely overlaps [addr, ...) is not found, and the protect
+// reads the file).
+func (f *File) cacheImageAt(addr haddr) *h5cPrefetched {
+	i := sort.Search(len(f.cacheImage), func(i int) bool { return f.cacheImage[i].addr >= addr })
+	if i < len(f.cacheImage) && f.cacheImage[i].addr == addr {
+		return &f.cacheImage[i]
 	}
 	return nil
 }
 
-// overlayCacheImage copies the parts of the prefetched entries that
-// overlap buf (read at addr) over it.
+// cacheImageEntry returns the first n bytes of the image of the prefetched
+// entry at addr, if there is one holding at least n bytes (the protect
+// deserializes its image without reading the file).
+func (f *File) cacheImageEntry(addr haddr, n uint64) []byte {
+	if e := f.cacheImageAt(addr); e != nil && n <= uint64(len(e.image)) {
+		return e.image[:n]
+	}
+	return nil
+}
+
+// overlayCacheImage copies the image of the prefetched entry at addr, if
+// any, over the start of buf (read at addr): a speculative read longer
+// than the entry, which libhdf5 does not make for a prefetched entry,
+// sees the entry's image in the bytes the entry covers.
 func (f *File) overlayCacheImage(addr haddr, buf []byte) {
-	end := addr + uint64(len(buf))
-	for i := range f.cacheImage {
-		e := &f.cacheImage[i]
-		eEnd := e.addr + uint64(len(e.image))
-		if e.addr >= end {
-			break
-		}
-		if eEnd <= addr {
-			continue
-		}
-		lo, hi := max(addr, e.addr), min(end, eEnd)
-		copy(buf[lo-addr:hi-addr], e.image[lo-e.addr:hi-e.addr])
+	if e := f.cacheImageAt(addr); e != nil {
+		copy(buf, e.image)
 	}
 }
