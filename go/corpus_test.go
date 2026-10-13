@@ -12,6 +12,15 @@ import (
 // lives in (found by src/H5public.h).
 func repoRoot(t testing.TB) string {
 	t.Helper()
+	// HDF5_REPO_ROOT points at the checkout when the package is tested from a
+	// copy outside it (mutation testing tools copy the module to a temporary
+	// directory).
+	if root := os.Getenv("HDF5_REPO_ROOT"); root != "" {
+		if _, err := os.Stat(filepath.Join(root, "src", "H5public.h")); err != nil {
+			t.Fatalf("HDF5_REPO_ROOT=%s is not an HDF5 repository checkout", root)
+		}
+		return root
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
