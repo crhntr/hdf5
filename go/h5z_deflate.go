@@ -25,7 +25,13 @@ func h5zFilterDeflateFunc(flags uint, cdValues []uint32, buf []byte) ([]byte, er
 	}
 
 	/* Input; uncompress */
+	return h5zInflate(buf, h5zDeflateMaxOutput)
+}
 
+// h5zInflate is the decompression loop of H5Z__filter_deflate: inflate the
+// zlib stream in buf, failing if it expands to more than maxOutput bytes
+// (where the C code fails to allocate the output buffer).
+func h5zInflate(buf []byte, maxOutput uint64) ([]byte, error) {
 	/* Initialize the uncompression routines */
 	zr, err := zlib.NewReader(bytes.NewReader(buf))
 	if err != nil {
@@ -35,11 +41,11 @@ func h5zFilterDeflateFunc(flags uint, cdValues []uint32, buf []byte) ([]byte, er
 
 	/* Loop to uncompress the buffer (until Z_STREAM_END); the output buffer
 	 * grows whenever it runs full. */
-	out, err := io.ReadAll(io.LimitReader(zr, h5zDeflateMaxOutput+1))
+	out, err := io.ReadAll(io.LimitReader(zr, int64(maxOutput+1)))
 	if err != nil {
 		return nil, wrapf(err, H5E_PLINE, H5E_CANTINIT, "inflate() failed")
 	}
-	if uint64(len(out)) > h5zDeflateMaxOutput {
+	if uint64(len(out)) > maxOutput {
 		return nil, errorf(H5E_RESOURCE, H5E_CANTALLOC, "memory allocation failed for deflate uncompression")
 	}
 	return out, nil

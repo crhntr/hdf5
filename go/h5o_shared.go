@@ -22,10 +22,13 @@ const h5oFheapIDLen = 8
 // h5oSharedRead is H5O__shared_read: read a message referred to by a shared
 // message. openOh is the object header being decoded (may be nil).
 //
-// A committed message must resolve to an unshared message: the C library
-// never writes a shared message into the header of a committed object, and
-// refusing chains of committed references bounds the recursion on corrupt
-// files whose shared messages refer to each other.
+// A message that is not in the shared message heap is read from the object
+// header the shared message names; when that message is itself shared,
+// decoding it reads the message it refers to in turn (the C code recurses
+// through H5O_msg_read and the decode callback). The chain is followed
+// here in a loop that refuses to visit an object header twice: the C
+// library recurses without end (and crashes) on shared messages that refer
+// to each other.
 func (f *File) h5oSharedRead(openOh *h5o, shared *h5oShared, typeID uint16) (any, error) {
 	var (
 		ret any
@@ -35,43 +38,57 @@ func (f *File) h5oSharedRead(openOh *h5o, shared *h5oShared, typeID uint16) (any
 	/* This message could have a heap ID (SOHM) or the address of an object
 	 * header on disk (named datatype)
 	 */
-	switch shared.typ {
-	case h5oShareTypeSohm:
-		/* Check for implicit shared object header message */
+	/* Check for implicit shared object header message */
+	if shared.typ == h5oShareTypeSohm {
 		/* (retrieving the message from the shared message heap, opening
 		 * the fractal heap and decoding the message is done by the shared
 		 * message module) */
 		if ret, err = f.smReadMessage(shared, typeID); err != nil {
 			return nil, wrapf(err, H5E_OHDR, H5E_CANTLOAD, "can't read message from fractal heap.")
 		}
-	case h5oShareTypeCommitted:
-		/* Build the object location for the shared message's object header */
-		oh := openOh
-		if openOh == nil || shared.oh != h5oGetOhAddr(openOh) {
-			/* The shared message is in another object header */
-			if oh, err = f.oProtect(shared.oh); err != nil {
-				return nil, wrapf(err, H5E_OHDR, H5E_READERROR, "unable to read message")
+	} else {
+		/* (the C code asserts that the type is H5O_SHARE_TYPE_COMMITTED;
+		 * a release build reads any other type as a committed message) */
+		visited := map[haddr]bool{}
+		for cur := shared; ; {
+			/* Build the object location for the shared message's object header */
+			oh := openOh
+			if openOh == nil || cur.oh != h5oGetOhAddr(openOh) {
+				/* The shared message is in another object header */
+				if oh, err = f.oProtect(cur.oh); err != nil {
+					return nil, wrapf(err, H5E_OHDR, H5E_READERROR, "unable to read message")
+				}
 			}
-		}
-		/* else: The shared message is in the already opened object header.
-		 * This is possible, for example, if an attribute's datatype is
-		 * shared in the same object header the attribute is in.  Read the
-		 * message directly. */
+			/* else: The shared message is in the already opened object header.
+			 * This is possible, for example, if an attribute's datatype is
+			 * shared in the same object header the attribute is in.  Read the
+			 * message directly. */
+			if visited[cur.oh] {
+				return nil, errorf(H5E_OHDR, H5E_READERROR, "shared message at %d refers to itself through other shared messages", cur.oh)
+			}
+			visited[cur.oh] = true
 
-		/* (refuse chains of committed references, see above) */
-		for _, m := range oh.mesgs {
-			if m.typeID == typeID {
-				if m.flags&h5oMsgFlagShared != 0 {
-					return nil, errorf(H5E_OHDR, H5E_READERROR, "committed message at %d refers to another shared message", shared.oh)
+			/* (H5O_msg_read: the first message of the type; a shared one
+			 * refers to the next message of the chain) */
+			var next *h5oShared
+			for _, m := range oh.mesgs {
+				if m.typeID == typeID {
+					if m.flags&h5oMsgFlagShared != 0 {
+						if next, err = h5oSharedDecodeHeader(f, f.newImage(m.raw), typeID); err != nil {
+							return nil, wrapf(err, H5E_OHDR, H5E_READERROR, "unable to read message")
+						}
+					}
+					break
+				}
+			}
+			if next == nil || next.typ == h5oShareTypeSohm {
+				if ret, err = f.msgRead(oh, typeID); err != nil {
+					return nil, wrapf(err, H5E_OHDR, H5E_READERROR, "unable to read message")
 				}
 				break
 			}
+			cur = next
 		}
-		if ret, err = f.msgRead(oh, typeID); err != nil {
-			return nil, wrapf(err, H5E_OHDR, H5E_READERROR, "unable to read message")
-		}
-	default:
-		return nil, errorf(H5E_OHDR, H5E_BADVALUE, "invalid shared message type %d", shared.typ)
 	}
 
 	/* Mark the message as shared */
