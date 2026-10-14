@@ -116,6 +116,15 @@ func hlHdrDeserialize(heap *h5hl, buf []byte, udata *h5hlCachePrfxUd) error {
 func hlFlDeserialize(heap *h5hl) error {
 	sizeofSize := uint64(heap.sizeofSize)
 
+	/* (Offsets of the free blocks seen so far, one bit per byte of the
+	 *  data block: a corrupt list could cycle, and the C loop would not
+	 *  end. The blocks may overlap, so a list without a cycle may hold
+	 *  more blocks than fit side by side in the data block.) */
+	var visited []uint64
+	if heap.freeHead != h5hlFreeNull {
+		visited = make([]uint64, (heap.dblkSize+63)/64)
+	}
+
 	/* Build free list */
 	freeBlock := heap.freeHead
 	for freeBlock != h5hlFreeNull {
@@ -123,12 +132,10 @@ func hlFlDeserialize(heap *h5hl) error {
 		if freeBlock+2*sizeofSize > heap.dblkSize || freeBlock+2*sizeofSize < freeBlock {
 			return errorf(H5E_HEAP, H5E_BADRANGE, "bad heap free list")
 		}
-
-		/* Bound the walk: a corrupt list could cycle. Every node occupies at
-		 * least 2*sizeof_size bytes of the data block. */
-		if uint64(len(heap.freelist))*2*sizeofSize >= heap.dblkSize {
-			return errorf(H5E_HEAP, H5E_BADRANGE, "bad heap free list")
+		if visited[freeBlock/64]&(1<<(freeBlock%64)) != 0 {
+			return errorf(H5E_HEAP, H5E_BADRANGE, "bad heap free list: cycle at offset %d", freeBlock)
 		}
+		visited[freeBlock/64] |= 1 << (freeBlock % 64)
 
 		/* Allocate & initialize free list node */
 		fl := h5hlFree{offset: freeBlock}

@@ -50,7 +50,11 @@ func h5hfTinyGetObjLen(hdr *h5hfHdr, id []byte) (uint64, error) {
 		if len(id) < 2 {
 			return 0, errorf(H5E_HEAP, H5E_BADVALUE, "heap ID too short for a tiny object")
 		}
-		encObjSize = uint64(id[1]) | (uint64(id[0])<<8)&h5hfTinyMaskExt1
+		/* (as in the C library, the first byte is masked with
+		 *  H5HF_TINY_MASK_EXT_1 before it is shifted, which leaves
+		 *  nothing of it: the length is decoded from the second byte
+		 *  only) */
+		encObjSize = uint64(id[1]) | (uint64(id[0])&h5hfTinyMaskExt1)<<8
 	}
 
 	/* Set the object's length */
